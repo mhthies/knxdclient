@@ -112,7 +112,17 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.INT16:
         return struct.pack('>h', value)
     elif t is KNXDPT.FLOAT16:
-        return struct.pack('>e', value)
+        # Source: https://github.com/mknx/smarthome/blob/15ebd847eac142557ab1b8d7ff92dafe965ea7b2/plugins/knx/dpts.py#L143
+        s = 0
+        e = 0
+        if value < 0:
+            s = 0x8000
+        m = int(value * 100)
+        while (m > 2047) or (m < -2048):
+            e = e + 1
+            m = m >> 1
+        num = s | (e << 11) | (int(m) & 0x07ff)
+        return struct.pack('>H', num)
     elif t is KNXDPT.TIME:
         return bytes([((value.weekday+1) << 5 if value.weekday is not None else 0) | value.time.hour,
                       value.time.minute,
@@ -185,7 +195,15 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.INT16:
         return struct.unpack('>h', value)[0]
     elif t is KNXDPT.FLOAT16:
-        return struct.unpack('>e', value)[0]
+        # Source: https://github.com/mknx/smarthome/blob/15ebd847eac142557ab1b8d7ff92dafe965ea7b2/plugins/knx/dpts.py#L156
+        i1 = value[0]
+        i2 = value[1]
+        s = (i1 & 0x80) >> 7
+        e = (i1 & 0x78) >> 3
+        m = (i1 & 0x07) << 8 | i2
+        if s == 1:
+            s = -1 << 11
+        return (m | s) * 0.01 * pow(2, e)
     elif t is KNXDPT.TIME:
         weekday_value = value[0] >> 5 & 0x07
         return KNXTime(
