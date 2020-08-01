@@ -82,9 +82,15 @@ class KNXDPT(enum.Enum):
     SCENE_CONTROL = 18
     DATE_TIME = 19
     ENUM8 = 20
+    VARSTRING = 24
 
 
 EncodedData = Union[int, bytes]
+
+
+class KNXTime(NamedTuple):
+    time: datetime.time
+    weekday: Optional[int]
 
 
 def encode_value(value: Any, t: KNXDPT) -> EncodedData:
@@ -108,7 +114,9 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.FLOAT16:
         return struct.pack('>e', value)
     elif t is KNXDPT.TIME:
-        return bytes([value.isoweekday() << 5 | value.hour, value.minute, value.second])
+        return bytes([((value.weekday+1) << 5 if value.weekday is not None else 0) | value.time.hour,
+                      value.time.minute,
+                      value.time.second])
     elif t is KNXDPT.DATE:
         return bytes([value.day, value.month, value.year - 2000])
     elif t is KNXDPT.UINT32:
@@ -125,10 +133,35 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.SCENE_CONTROL:
         return bytes([(0x80 if value[0] else 0) | value[1] & 0x3f])
     elif t is KNXDPT.DATE_TIME:
-        # TODO
-        raise NotImplementedError()
+        year = month = day = hour = minute = second = weekday = 0
+        date_invalid = time_invalid = 1
+        dst = 0
+        if isinstance(value, (datetime.date, datetime.datetime)):
+            year = value.year
+            month = value.month
+            day = value.day
+            date_invalid = 0
+        if isinstance(value, (datetime.time, datetime.datetime)):
+            value = value.astimezone()
+            hour = value.hour
+            minute = value.minute
+            second = value.second
+            time_invalid = 0
+            if isinstance(value, datetime.datetime):
+                dst = int(bool(value.tzinfo.dst(value)))
+        else:
+            year = month = day = 0
+        return bytes([year-2000, month, day, ((weekday+1) << 5 if not date_invalid else 0) | hour,
+                      minute, second,
+                      (0x20 | (date_invalid * 0x1c) | (time_invalid * 0x02) | (dst * 0x01)),
+                      0])
     elif t is KNXDPT.ENUM8:
+        # Support raw int values or Python enum with value type int
+        if isinstance(value, int):
+            return bytes([value])
         return bytes([value.value])
+    elif t is KNXDPT.VARSTRING:
+        return value.encode('iso-8859-1') + b'\0'
     else:
         raise NotImplementedError()
 
@@ -154,8 +187,10 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.FLOAT16:
         return struct.unpack('>e', value)[0]
     elif t is KNXDPT.TIME:
-        # TODO handle weekday
-        return datetime.time(value[0] & 0x1f, value[1], value[2])
+        weekday_value = value[0] >> 5 & 0x07
+        return KNXTime(
+            datetime.time(value[0] & 0x1f, value[1], value[2]),
+            weekday_value-1 if weekday_value else None)
     elif t is KNXDPT.DATE:
         return datetime.date(value[0], value[1], value[2]+2000)
     elif t is KNXDPT.UINT32:
@@ -164,17 +199,17 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
         return struct.unpack('>i', value)[0]
     elif t is KNXDPT.FLOAT32:
         return struct.unpack('>f', value)[0]
-    elif t is KNXDPT.STRING:
-        return value.decode('iso-8859-1')
+    elif t in (KNXDPT.STRING, KNXDPT.VARSTRING):
+        return value.decode('iso-8859-1').split('\0')[0]
     elif t is KNXDPT.SCENE_NUMBER:
         return value[0]
     elif t is KNXDPT.SCENE_CONTROL:
         return bool(value[0] & 0x80), value[0] & 0x3f
     elif t is KNXDPT.DATE_TIME:
-        # TODO
-        raise NotImplementedError()
+        return datetime.datetime(year=value[0]+2000, month=value[1], day=value[2], hour=value[3] & 0x1f,
+                                 minute=value[4], second=value[5])
     elif t is KNXDPT.ENUM8:
-        # TODO enums?
+        # The raw int value is returned. The User code must construct the correct Enum type if required.
         return value[0]
     else:
         raise NotImplementedError()
