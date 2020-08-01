@@ -276,13 +276,17 @@ class KNXDConnection:
     def __init__(self):
         self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []
 
-    async def connect(self, *args, **kwargs):
+    async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
         self._lock = asyncio.Lock()
         self._current_response: Optional[KNXDPacket] = None
         self._response_ready = asyncio.Event()
 
-        logger.info("Connecting to KNXd {}{} ...".format(args, kwargs))
-        self._reader, self._writer = await asyncio.open_connection(*args, **kwargs)
+        if sock:
+            logger.info("Connecting to KNXd via UNIX domain socket at %s ...", sock)
+            self._reader, self._writer = await asyncio.open_unix_connection(sock)
+        else:
+            logger.info("Connecting to KNXd at %s:%s ...", host, port)
+            self._reader, self._writer = await asyncio.open_connection(host=host, port=port)
         logger.info("Connecting to KNXd successful")
 
     async def run(self):
