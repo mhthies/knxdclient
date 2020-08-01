@@ -242,8 +242,6 @@ class KNXDAPDU(NamedTuple):
 
     def encode(self) -> bytes:
         if isinstance(self.value, bytes):
-            if self.value:
-                raise ValueError("KNXDAPDU must not have _value and extended _value")
             return bytes([0, self.type.value]) + self.value
         elif self.value > 0b00111111 or self.value < 0:
             raise ValueError("Invalid value {} for KNXDAPDU".format(self.value))
