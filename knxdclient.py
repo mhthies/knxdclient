@@ -342,6 +342,13 @@ class KNXDConnection:
 
     async def run(self):
         logger.info("Entering KNXd client receive loop ...")
+
+        async def call_handler(handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]], apdu: ReceivedGroupAPDU):
+            try:
+                await handler(apdu)
+            except Exception as e:
+                logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
+
         while True:
             try:
                 length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
@@ -352,8 +359,7 @@ class KNXDConnection:
                     apdu = ReceivedGroupAPDU.decode(packet.data)
                     logger.debug("Received Group Address broadcast (APDU) from KNXd: %s", apdu)
                     for handler in self._handlers:
-                        # TODO add supervisors to catch and log exceptions in handlers
-                        asyncio.create_task(handler(apdu))
+                        asyncio.create_task(call_handler(handler, apdu))
                 else:
                     self._current_response = packet
                     self._response_ready.set()
