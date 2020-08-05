@@ -326,6 +326,7 @@ class ReceivedGroupAPDU(NamedTuple):
 class KNXDConnection:
     def __init__(self):
         self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []
+        self.closing = False
 
     async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
         self._lock = asyncio.Lock()
@@ -363,14 +364,22 @@ class KNXDConnection:
                 else:
                     self._current_response = packet
                     self._response_ready.set()
-            except asyncio.IncompleteReadError:
-                logger.info("KNXd connection reached EOF. Shutting down KNXClient.")
-                return
+            except asyncio.IncompleteReadError as e:
+                if self.closing:
+                    logger.info("KNXd connection reached EOF. KNXd client is stopped.")
+                    return
+                else:
+                    raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
+            except ConnectionError:
+                # A connection error typically means we cannot proceed further with this connection. Thus  we abort the
+                # receive loop execution with the exception.
+                raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
 
     async def stop(self):
         logger.info("Stopping KNXd client ...")
+        self.closing = True
         self._writer.close()
         await self._writer.wait_closed()
 
