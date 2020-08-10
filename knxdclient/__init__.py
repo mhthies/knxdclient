@@ -99,17 +99,22 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.INT16:
         return struct.pack('>h', value)
     elif t is KNXDPT.FLOAT16:
-        # Source: https://github.com/mknx/smarthome/blob/15ebd847eac142557ab1b8d7ff92dafe965ea7b2/plugins/knx/dpts.py#L143
-        s = 0
+        # KNX's DPT 9 (16bit float) is defined in the KNX Standard, section 3.7.2.3.10.
+        # It is not compatible with the IEEE 754-2008 standard.
+        # According to the standard, it uses a 4bit exponent (0-15), a 12bit two's complement mantissa and a prescaler
+        # of 0,01. The calculation formula is defined by V = (0.01 * M) * 2^E. The 16 bits are used in the following
+        # pattern: MEEE EMMM | MMMM MMMM. (First bit of the mantissa, which denotes the sign, is split apart from the
+        # rest of the mantissa).
+        # The highest resolution is 0,01 (with E = 0), so round the value to that resolution and increase E (lower
+        # resolution) until the value fits the 12 bit mantissa
+        m = round(value * 100)
         e = 0
-        if value < 0:
-            s = 0x8000
-        m = int(value * 100)
-        while (m > 2047) or (m < -2048):
-            e = e + 1
-            m = m >> 1
-        num = s | (e << 11) | (int(m) & 0x07ff)
-        return struct.pack('>H', num)
+        while m > 2047 or m < -2048:
+            e += 1
+            m = m >> 1  # FIXME: We are not rounding correctly here
+            if e > 15:
+                raise ValueError("Value {} is out of representable range for KNX DPT 9".format(value))
+        return bytes([(m & 0x0800) >> 4 | e << 3 | (m & 0x0700) >> 8, m & 0xff])
     elif t is KNXDPT.TIME:
         return bytes([((value.weekday+1) << 5 if value.weekday is not None else 0) | value.time.hour,
                       value.time.minute,
@@ -190,15 +195,12 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.INT16:
         return struct.unpack('>h', value)[0]
     elif t is KNXDPT.FLOAT16:
-        # Source: https://github.com/mknx/smarthome/blob/15ebd847eac142557ab1b8d7ff92dafe965ea7b2/plugins/knx/dpts.py#L156
-        i1 = value[0]
-        i2 = value[1]
-        s = (i1 & 0x80) >> 7
-        e = (i1 & 0x78) >> 3
-        m = (i1 & 0x07) << 8 | i2
-        if s == 1:
-            s = -1 << 11
-        return (m | s) * 0.01 * pow(2, e)
+        # For a description of the KNX DPT 9 16-bit floating point format see comment in `encode_value()` above.
+        # In two's complement notation, the MSB has a negative value (-2^(n-1)):
+        msb = - (value[0] & 0x80) << 4
+        e = (value[0] & 0x78) >> 3
+        m = (value[0] & 0x07) << 8 | value[1]
+        return (m + msb) * 0.01 * 2**e
     elif t is KNXDPT.TIME:
         weekday_value = value[0] >> 5 & 0x07
         return KNXTime(
