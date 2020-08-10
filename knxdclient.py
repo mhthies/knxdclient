@@ -1,3 +1,16 @@
+"""
+A pure Python async client for KNXd's (EIBd's) native Layer 4 KNX protocol.
+
+This module reimplements small parts of the EIBd client (see BCUSDK documentation
+`archive link <https://web.archive.org/web/20160418110523/https://www.auto.tuwien.ac.at/~mkoegler/eib/sdkdoc-0.0.5.pdf>`_)
+based on Python asynchronous coroutines (asyncio). Currently, it allows to open a GroupSocket for sending and receiving
+KNX telegrams to/for any group address via KNXd. Additionally, there are helper methods :func:`encode_value` and
+:func:`decode_value` to convert the values from/to native Python types according to a known KNX Datapoint Type
+(DPT).
+
+This module's base class is :class:`KNXDConnection`. See its docstring for further reference.
+"""
+
 import asyncio
 import datetime
 import enum
@@ -62,6 +75,11 @@ class KNXDPacketTypes(enum.Enum):
 
 
 class KNXDPT(enum.Enum):
+    """
+    Enum of supported KNX Datapoint Types (DPTs). Used by :func:`encode_value` and :func:`decode_value` to specify how
+    the value should be interpreted. Each entries int `value` corresponds to the KNX Datatype Main number (according to
+    KNX specification section 3.7.2).
+    """
     BOOLEAN = 1
     TWO_BOOLEAN = 2
     BOOLEAN_UINT3 = 3
@@ -89,11 +107,22 @@ EncodedData = Union[int, bytes]
 
 
 class KNXTime(NamedTuple):
+    """ Python representation of a KNX 'time of day' packet. In addition to the actual time, it contains a weekday
+    number (from 0-6)."""
     time: datetime.time
     weekday: Optional[int]
 
 
 def encode_value(value: Any, t: KNXDPT) -> EncodedData:
+    """
+    Encode a python value for sending in a KNX telegram according to a known KNX Datapoint type (from KNX specification,
+    section 3.7.2).
+
+    :param value: The value to encode
+    :param t: The target KNX datapoint main type from `KNXDPT`
+    :return: the encoded value as an integer (for 1-6 bit values, which are encoded in byte 2 of the APDU) or a bytes
+        string.
+    """
     # TODO add type and range checks
     if t is KNXDPT.BOOLEAN:
         return 1 if value else 0
@@ -177,6 +206,14 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
 
 
 def decode_value(value: EncodedData, t: KNXDPT) -> Any:
+    """
+    Decode an encoded value from a KNX telegram according to a known KNX Datapoint type (from KNX specification,
+    section 3.7.2).
+
+    :param value: The encoded value, as a single int for 1-6 bit values or a bytes string for multibyte values
+    :param t: The value's KNX datapoint main type from `KNXDPT`
+    :return: the decoded value
+    """
     # TODO add type checks
     if t is KNXDPT.BOOLEAN:
         return bool(value)
@@ -234,14 +271,19 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
 
 
 class KNXDPacket(NamedTuple):
+    """
+    A packet in TCP/socket communcation with the KNXd/EIBd daemon.
+    """
     type: KNXDPacketTypes
     data: bytes
 
     def encode(self) -> bytes:
+        """Encode a packet for sending it to the KNXd/EIBd."""
         return self.type.value.to_bytes(2, byteorder='big') + self.data
 
     @classmethod
     def decode(cls, data: bytes) -> "KNXDPacket":
+        """Construct a packet tuple from the binary data received from the KNXd/EIBd."""
         return cls(KNXDPacketTypes(int.from_bytes(data[0:2], byteorder='big')), data[2:])
 
     def __repr__(self) -> str:
@@ -249,12 +291,19 @@ class KNXDPacket(NamedTuple):
 
 
 class KNXDAPDUType(enum.Enum):
+    """
+    KNX Group value APDU types. The int value of each entry corresponds to the second byte of the TPDU packet (see KNX
+    specification, section 3.3.7.2).
+    """
     WRITE = 0b10000000
     READ = 0b00000000
     RESPONSE = 0b01000000
 
 
-class KNXDAPDU(NamedTuple):
+class KNXGroupAPDU(NamedTuple):
+    """
+    A KNX A_GroupValue_Read/Response/Write-PDU (Application Data Unit), splitted into type and binary encoded value
+    """
     type: KNXDAPDUType
     value: EncodedData
 
@@ -262,12 +311,12 @@ class KNXDAPDU(NamedTuple):
         if isinstance(self.value, bytes):
             return bytes([0, self.type.value]) + self.value
         elif self.value > 0b00111111 or self.value < 0:
-            raise ValueError("Invalid value {} for KNXDAPDU".format(self.value))
+            raise ValueError("Invalid value {} for KNXGroupAPDU".format(self.value))
         else:
             return bytes([0, self.type.value | self.value])
 
     @classmethod
-    def decode(cls, data: bytes) -> "KNXDAPDU":
+    def decode(cls, data: bytes) -> "KNXGroupAPDU":
         apdu_type = KNXDAPDUType(data[1] & 0b11000000)
         if len(data) > 2:
             return cls(apdu_type, data[2:])
@@ -280,15 +329,20 @@ class KNXDAPDU(NamedTuple):
 
 
 class GroupAddress(NamedTuple):
+    """
+    A KNX group address in the three-layer (main/middle/sub) notation
+    """
     main: int
     middle: int
     sub: int
 
     def encode(self) -> bytes:
+        """Encode the KNX Group address into the two-octet transfer encoding"""
         return bytes([(self.main << 3) | self.middle, self.sub])
 
     @classmethod
     def decode(cls, data: bytes) -> "GroupAddress":
+        """Decode a KNX Group address from the two-octet transfer encoding"""
         return cls(((data[0] >> 3) & 0x1f), data[0] & 0x07, data[1])
 
     def __repr__(self):
@@ -296,15 +350,20 @@ class GroupAddress(NamedTuple):
 
 
 class IndividualAddress(NamedTuple):
+    """
+    A KNX device's Individual Address in the area.line.device notation
+    """
     area: int
     line: int
     device: int
 
     def encode(self) -> bytes:
+        """Encode the KNX Individual Address into the two-octet transfer encoding"""
         return bytes([(self.area << 4) | self.line, self.device])
 
     @classmethod
     def decode(cls, data: bytes) -> "IndividualAddress":
+        """Decode a KNX Individual Address from the two-octet transfer encoding"""
         return cls(((data[0] >> 4) & 0x0f), data[0] & 0x0f, data[1])
 
     def __repr__(self):
@@ -312,29 +371,94 @@ class IndividualAddress(NamedTuple):
 
 
 class ReceivedGroupAPDU(NamedTuple):
+    """
+    A KNX Group Value Application Protocol, as received from KNXd in a EIB_GROUP_PACKET type packet. In addition to the
+    APDU itself, the sender's individual address and the destination group address are included.
+    """
     src: IndividualAddress
     dst: GroupAddress
-    payload: KNXDAPDU
+    payload: KNXGroupAPDU
 
     @classmethod
     def decode(cls, data: bytes) -> "ReceivedGroupAPDU":
+        """Decode all information (source Individual Gddress, destination Group Address and APDU) from the payload of
+        an EIB_GROUP_PACKET-type KNXd packet."""
         return cls(IndividualAddress.decode(data[0:2]),
                    GroupAddress.decode(data[2:4]),
-                   KNXDAPDU.decode(data[4:]))
+                   KNXGroupAPDU.decode(data[4:]))
 
 
 class KNXDConnection:
+    """
+    A connector for the KNXd native protocol. It wraps an asyncio TCP or UNIX socket server and provides highlevel
+    (async) methods to interact with KNXd.
+
+    The main control flow for the connector is split into three methods:
+
+    * :meth:`connect` trys to open the TCP/unix socket to connect to KNXd. It returns upon successful estalishment of
+        the connection or raises an exception.
+    * :meth:`run` runs the main receive loop for incoming messages (like Group Addres telegrams). It spins in an await
+        loop until the connector has been stopped gracefully. In case of a read error, an exception is raised.
+    * :meth:`stop` initiates a graceful shutdown and termination of the connection.
+
+    To send and receive Group Address packets, a Group Socket must be opened in KNXD. This is initiated by the
+    :meth:`open_group_socket` method. However, this method requires the receive loop (i.e. the :meth:`run` method)
+    to be already running in an second asyncio task.
+
+    After opening the Group Socket, incoming Group Address telegrams are registered and passed on to all handler
+    functions, registered via :meth:`register_telegram_handler`. To send a Group Address telegram, :meth:`group_write`
+    can be used.
+
+    In summary, a typical invocation of this connector looks like this::
+
+        async def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
+            print("Received group telegram: {}".format(packet))
+
+        connection = KNXDConnection()
+        connection.register_telegram_handler(handler)
+        await connection.connect()
+        # Connection was successful. Start receive loop:
+        run_task = asyncio.create_task(connection.run())
+        # Now that the receive loop is running, we can open the KNXd Group Socket:
+        await connection.open_group_socket()
+
+        # Startup completed. Now our `handler()` will receive incoming telegrams and we can send some:
+        await connection.group_write(GroupAddress(1,3,2), KNXDAPDUType.WRITE, encode_value(True, KNXDPT.BOOLEAN))
+
+        # Let's stop the connection and wait for graceful termination of the receive loop:
+        await connection.stop()
+        await run_task
+    """
     def __init__(self):
         self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []
         self.closing = False
-
-    async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
-        self._lock = asyncio.Lock()
         self._current_response: Optional[KNXDPacket] = None
+        # A lock to ensure, that only one synchronous action is performed on the KNXD connection at once. Synchronous
+        # actions are for example EIB_OPEN_GROUPCON. The lock should be acquired before sending the synchronous request
+        # packet to KNXD and only released after receiving the response packet from KNXD.
+        # Sending and receiving group telegrams via an opened Group Socket is asynchronous and thus does not require the
+        # lock.
+        self._lock = asyncio.Lock()
+        # An (asyncio) event to await the receipt of a synchronous response packet from KNXD. Before sending a
+        # synchronous request packet to KNXD, a coroutine method should ``clear()`` this event; and afterwards
+        # ``wait()`` on it. As soon as a response is received by the :meth:`run` coroutine, it will store the response
+        # in ``_current_response` and inform the waiting method by setting the event.
         self._response_ready = asyncio.Event()
 
+    async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
+        """
+        Coroutine to connect to KNXd/EIBd via TCP port or UNIX socket
+
+        Awaits until connection has been established or raises one of Python's built in Exceptions on connection errors.
+
+        :param host: KNXd host for TCP connection. Defaults to 'localhost'. Ignored, if `sock` is present.
+        :param port: Port for KNXd TCP connection. Defaults to 6720, which is KNXd's default port. Ignored, if `sock` is
+            present.
+        :param sock: Path of the KNXd UNIX socket. If given, `host` and `port` are ignored.
+        """
         if sock:
             logger.info("Connecting to KNXd via UNIX domain socket at %s ...", sock)
+            # TODO close previous connection if any
             self._reader, self._writer = await asyncio.open_unix_connection(sock)
         else:
             logger.info("Connecting to KNXd at %s:%s ...", host, port)
@@ -342,6 +466,24 @@ class KNXDConnection:
         logger.info("Connecting to KNXd successful")
 
     async def run(self):
+        """
+        Coroutine for running the receive loop for incoming packets from EIBD/KNXD.
+
+        This method awaits incoming packets in a loop and only returns upon successful shutdown via :meth:`stop`. In
+        case of an ``ConnectionError`` or an unexpected connection termination, an exception is raised. Other
+        exceptions occuring within the loop are caught and logged.
+
+        The connection with KNXD must be opened using :meth:`connect`, before starting this coroutine.
+
+        Incoming packets are separated by their type:
+        * for each packet of type *EIB_GROUP_PACKET* (asynchronous message from KNXD), all registered telegram handlers
+          are called with the payload decoded as :class:`ReceivedGroupAPDU`
+        * for every other (synchronous response) EIBD packet type, the packet is stored in an internal buffer and
+          waiting synchronous KNXD request functions (like :meth:`open_group_socket`) are informed.
+
+        :raises ConnectionAbortedError: in case of an unexpected EOF (connection closed without ``stop()`` being called)
+        :raises ConnectionError: in case such an error occurs while reading
+        """
         logger.info("Entering KNXd client receive loop ...")
 
         async def call_handler(handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]], apdu: ReceivedGroupAPDU):
@@ -350,6 +492,7 @@ class KNXDConnection:
             except Exception as e:
                 logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
 
+        # TODO check if _reader is existing
         while True:
             try:
                 length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
@@ -378,20 +521,49 @@ class KNXDConnection:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
 
     async def stop(self):
+        """
+        Coroutine to initiate a graceful shutdown of the KNXD connection.
+
+        This coroutine awaits the successful shutdown of the connection.
+        """
         logger.info("Stopping KNXd client ...")
         self.closing = True
         self._writer.close()
         await self._writer.wait_closed()
 
     def register_telegram_handler(self, handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]]) -> None:
+        """
+        Register a coroutine as callback handler for incoming group read/response/write telegrams.
+
+        The :meth:`run` coroutine will run each registered handler function in a separate :class:`asyncio.Task` for
+        every incoming group telegram (asynchronous message from KNXD). To enable receiving of group telegrams, a
+        Group Socket has to be opened in KNXD.
+
+        :param handler: The handler coroutine. It must be awaitable and take a single argument of type
+            :class:`ReceivedGroupAPDU`.
+        """
         self._handlers.append(handler)
 
     async def open_group_socket(self, write_only=False) -> None:
+        """
+        Coroutine to request KNXD to open a Group Socket for sending and receiving group telegrams to/from any Group
+        Address.
+
+        This is a synchronous KNXD function, i.e. it will send a request packet to KNXD and await the receipt of a
+        response packet from KNXD.
+        Attention: This coroutine requires :meth:`run` to be running in a separate task of the **same** asyncio event
+        loop!
+
+        :param write_only: If True, KNXD is requested to open the Group Socket in write-only mode, i.e. no incoming
+            group telegrams will be received.
+        :raises RuntimeError: when KNXD responds with an error message or an unexpected response packet.
+        """
         logger.info("Opening KNX group socket for sending to group addresses ...")
         async with self._lock:
             self._response_ready.clear()
-            await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON, bytes([0, 0xff if write_only else 0, 0])))
-            await self._response_ready.wait()
+            await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON,
+                                                    bytes([0, 0xff if write_only else 0, 0])))
+            await self._response_ready.wait()  # TODO add timeout and Exception on timeout
             response = self._current_response
         assert(response is not None)
         if response.type is not KNXDPacketTypes.EIB_OPEN_GROUPCON:
@@ -400,11 +572,33 @@ class KNXDConnection:
             logger.info("Opening KNX group socket successful")
 
     async def group_write(self, addr: GroupAddress, write_type: KNXDAPDUType, encoded_data: EncodedData) -> None:
+        """
+        Send a Group Read/Response/Write telegram to the KNX bus via a KNXD Group Socket.
+
+        This requires an open connection to KNXD and a KNXD Group Socket being opened on this connection. See
+        :meth:`connect` and :meth:`open_group_socket`.
+
+        This coroutine awaits the sending (including flushing the write buffer) of the packet to KNXD.
+
+        :param addr: The KNX group address as :class:`GroupAddress`
+        :param write_type: The telegram type (read/response/write) as :class:`KNXDAPDUType`
+        :param encoded_data: The payload data, binary encoded for KNX transmission, as returned by :func:`encode_data`
+            when called with the correct KNX Datapoint type for the relevant Group Address.
+        """
         logger.debug("%s to KNX group address %s: %s", write_type.name, addr, encoded_data)
         await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_GROUP_PACKET,
-                                                addr.encode() + KNXDAPDU(write_type, encoded_data).encode()))
+                                                addr.encode() + KNXGroupAPDU(write_type, encoded_data).encode()))
 
-    async def _send_eibd_packet(self, packet: KNXDPacket):
+    async def _send_eibd_packet(self, packet: KNXDPacket) -> None:
+        """
+        Send a packet to KNXD via its simple TCP/UNIX protocol.
+
+        Requires an open connection to KNXD.
+        This coroutine awaits the sending (including flushing the write buffer) of the packet to KNXD.
+
+        :param packet: The packet to send, as a :class:`KNXDPacket`
+        """
+        # TODO check if _writer is existing
         logger.debug("Sending packet to KNXd: %s", packet)
         data = packet.encode()
         if len(data) < 2 or len(data) > 0xffff:
