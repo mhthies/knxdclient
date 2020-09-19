@@ -72,7 +72,7 @@ class KNXTime(NamedTuple):
 
     @classmethod
     def from_datetime(cls, value: datetime.datetime):
-        return cls(value.time, value.weekday())
+        return cls(value.time(), value.weekday())
 
 
 def encode_value(value: Any, t: KNXDPT) -> EncodedData:
