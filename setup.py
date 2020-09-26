@@ -16,7 +16,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="knxdclient",
-    version="0.2.1",
+    version="0.3.0",
     author="Michael Thies",
     author_email="mail@mhthies.de",
     url="https://github.com/mhthies/knxdclient",
