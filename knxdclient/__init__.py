@@ -27,7 +27,7 @@ import datetime
 import enum
 import logging
 import struct
-from typing import NamedTuple, Awaitable, Callable, List, Any, Union, Optional
+from typing import NamedTuple, Awaitable, Callable, List, Any, Union, Optional, cast, Type, Dict, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -61,9 +61,6 @@ class KNXDPT(enum.Enum):
     VARSTRING = 24
 
 
-EncodedData = Union[int, bytes]
-
-
 class KNXTime(NamedTuple):
     """ Python representation of a KNX 'time of day' packet. In addition to the actual time, it contains a weekday
     number (from 0-6)."""
@@ -73,6 +70,55 @@ class KNXTime(NamedTuple):
     @classmethod
     def from_datetime(cls, value: datetime.datetime):
         return cls(value.time(), value.weekday())
+
+
+EncodedData = Union[int, bytes]
+
+DPT_ENCODING: Dict[KNXDPT, Type[EncodedData]] = {
+    KNXDPT.BOOLEAN: int,
+    KNXDPT.TWO_BOOLEAN: int,
+    KNXDPT.BOOLEAN_UINT3: int,
+    KNXDPT.CHAR: bytes,
+    KNXDPT.UINT8: bytes,
+    KNXDPT.INT8: bytes,
+    KNXDPT.UINT16: bytes,
+    KNXDPT.INT16: bytes,
+    KNXDPT.FLOAT16: bytes,
+    KNXDPT.TIME: bytes,
+    KNXDPT.DATE: bytes,
+    KNXDPT.UINT32: bytes,
+    KNXDPT.INT32: bytes,
+    KNXDPT.FLOAT32: bytes,
+    KNXDPT.STRING: bytes,
+    KNXDPT.SCENE_NUMBER: bytes,
+    KNXDPT.SCENE_CONTROL: bytes,
+    KNXDPT.DATE_TIME: bytes,
+    KNXDPT.ENUM8: bytes,
+    KNXDPT.VARSTRING: bytes,
+}
+
+DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, type] = {
+    KNXDPT.BOOLEAN: bool,
+    KNXDPT.TWO_BOOLEAN: tuple,
+    KNXDPT.BOOLEAN_UINT3: tuple,
+    KNXDPT.CHAR: str,
+    KNXDPT.UINT8: int,
+    KNXDPT.INT8: int,
+    KNXDPT.UINT16: int,
+    KNXDPT.INT16: int,
+    KNXDPT.FLOAT16: float,
+    KNXDPT.TIME: KNXTime,
+    KNXDPT.DATE: datetime.date,
+    KNXDPT.UINT32: int,
+    KNXDPT.INT32: int,
+    KNXDPT.FLOAT32: float,
+    KNXDPT.STRING: str,
+    KNXDPT.SCENE_NUMBER: int,
+    KNXDPT.SCENE_CONTROL: tuple,
+    KNXDPT.DATE_TIME: datetime.datetime,
+    KNXDPT.ENUM8: (int, enum.Enum),
+    KNXDPT.VARSTRING: str,
+}
 
 
 def encode_value(value: Any, t: KNXDPT) -> EncodedData:
@@ -85,23 +131,26 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     :return: the encoded value as an integer (for 1-6 bit values, which are encoded in byte 2 of the APDU) or a bytes
         string.
     """
-    # TODO add type and range checks
+    if not isinstance(value, DPT_PYTHON_REPRESENTATION[t]):
+        raise TypeError(f"Cannot use {repr(value)} as a KNX {t.name}, since it is not a {DPT_PYTHON_REPRESENTATION[t]}")
+    val = cast(Any, value)
+    # TODO add tuple entry type checks and range checks
     if t is KNXDPT.BOOLEAN:
-        return 1 if value else 0
+        return 1 if val else 0
     elif t is KNXDPT.TWO_BOOLEAN:
-        return (1 if value[0] else 0) << 1 | (1 if value[1] else 0)
+        return (1 if val[0] else 0) << 1 | (1 if val[1] else 0)
     elif t is KNXDPT.BOOLEAN_UINT3:
-        return (1 if value[0] else 0) << 3 | (value[1] & 0x07)
+        return (1 if val[0] else 0) << 3 | (val[1] & 0x07)
     elif t is KNXDPT.CHAR:
-        return bytes([value.encode('iso-8859-1')[0]])
+        return bytes([val.encode('iso-8859-1')[0]])
     elif t is KNXDPT.UINT8:
-        return bytes([value & 0xff])
+        return bytes([val & 0xff])
     elif t is KNXDPT.INT8:
-        return struct.pack('b', value)
+        return struct.pack('b', val)
     elif t is KNXDPT.UINT16:
-        return struct.pack('>H', value)
+        return struct.pack('>H', val)
     elif t is KNXDPT.INT16:
-        return struct.pack('>h', value)
+        return struct.pack('>h', val)
     elif t is KNXDPT.FLOAT16:
         # KNX's DPT 9 (16bit float) is defined in the KNX Standard, section 3.7.2.3.10.
         # It is not compatible with the IEEE 754-2008 standard.
@@ -109,52 +158,53 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
         # of 0,01. The calculation formula is defined by V = (0.01 * M) * 2^E. The 16 bits are used in the following
         # pattern: MEEE EMMM | MMMM MMMM. (First bit of the mantissa, which denotes the sign, is split apart from the
         # rest of the mantissa).
-        # The highest resolution is 0,01 (with E = 0), so round the value to that resolution and increase E (lower
-        # resolution) until the value fits the 12 bit mantissa
-        m = round(value * 100)
+        # The highest resolution is 0,01 (with E = 0), so round the val to that resolution and increase E (lower
+        # resolution) until the val fits the 12 bit mantissa
+        m = round(val * 100)
         e = 0
         while m > 2047 or m < -2048:
             e += 1
             m = m >> 1  # FIXME: We are not rounding correctly here
             if e > 15:
-                raise ValueError("Value {} is out of representable range for KNX DPT 9".format(value))
+                raise ValueError("Value {} is out of representable range for KNX DPT 9".format(val))
         return bytes([(m & 0x0800) >> 4 | e << 3 | (m & 0x0700) >> 8, m & 0xff])
     elif t is KNXDPT.TIME:
-        return bytes([((value.weekday+1) << 5 if value.weekday is not None else 0) | value.time.hour,
-                      value.time.minute,
-                      value.time.second])
+        return bytes([((val.weekday+1) << 5 if val.weekday is not None else 0) | val.time.hour,
+                      val.time.minute,
+                      val.time.second])
     elif t is KNXDPT.DATE:
-        return bytes([value.day, value.month, value.year - 2000])
+        return bytes([val.day, val.month, val.year - 2000])
     elif t is KNXDPT.UINT32:
-        return struct.pack('>I', value)
+        return struct.pack('>I', val)
     elif t is KNXDPT.INT32:
-        return struct.pack('>i', value)
+        return struct.pack('>i', val)
     elif t is KNXDPT.FLOAT32:
-        return struct.pack('>f', value)
+        return struct.pack('>f', val)
     elif t is KNXDPT.STRING:
-        enc = value.encode('iso-8859-1')
+        enc = val.encode('iso-8859-1')
         return enc + bytes([0] * (14 - len(enc)))
     elif t is KNXDPT.SCENE_NUMBER:
-        return bytes([value])
+        return bytes([val])
     elif t is KNXDPT.SCENE_CONTROL:
-        return bytes([(0x80 if value[0] else 0) | value[1] & 0x3f])
+        return bytes([(0x80 if val[0] else 0) | val[1] & 0x3f])
     elif t is KNXDPT.DATE_TIME:
         year = month = day = hour = minute = second = weekday = 0
         date_invalid = time_invalid = 1
         dst = 0
-        if isinstance(value, (datetime.date, datetime.datetime)):
-            year = value.year
-            month = value.month
-            day = value.day
+        if isinstance(val, (datetime.date, datetime.datetime)):
+            year = val.year
+            month = val.month
+            day = val.day
             date_invalid = 0
-        if isinstance(value, (datetime.time, datetime.datetime)):
-            value = value.astimezone()
-            hour = value.hour
-            minute = value.minute
-            second = value.second
+        if isinstance(val, (datetime.time, datetime.datetime)):
+            if isinstance(val, datetime.datetime):
+                val = val.astimezone()
+            hour = val.hour
+            minute = val.minute
+            second = val.second
             time_invalid = 0
-            if isinstance(value, datetime.datetime):
-                dst = int(bool(value.tzinfo.dst(value)))
+            if isinstance(val, datetime.datetime):
+                dst = int(bool(val.tzinfo.dst(val)))  # type: ignore
         else:
             year = month = day = 0
         return bytes([year-2000, month, day, ((weekday+1) << 5 if not date_invalid else 0) | hour,
@@ -162,12 +212,15 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
                       (0x20 | (date_invalid * 0x1c) | (time_invalid * 0x02) | (dst * 0x01)),
                       0])
     elif t is KNXDPT.ENUM8:
-        # Support raw int values or Python enum with value type int
-        if isinstance(value, int):
-            return bytes([value])
-        return bytes([value.value])
+        # Support raw int vals or Python enum with val type int
+        if isinstance(val, int):
+            return bytes([val])
+        val = val.value
+        if not isinstance(val, int):
+            raise TypeError(f"Enum entry value for ENUM8 must be an int")
+        return bytes([val])
     elif t is KNXDPT.VARSTRING:
-        return value.encode('iso-8859-1') + b'\0'
+        return val.encode('iso-8859-1') + b'\0'
     else:
         raise NotImplementedError()
 
@@ -181,55 +234,57 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     :param t: The value's KNX datapoint main type from `KNXDPT`
     :return: the decoded value
     """
-    # TODO add type checks
+    if not isinstance(value, DPT_ENCODING[t]):
+        raise TypeError(f"Expected a {DPT_PYTHON_REPRESENTATION[t]} for KNX {t.name}, not {repr(value)}")
+    val = cast(Any, value)
     if t is KNXDPT.BOOLEAN:
-        return bool(value)
+        return bool(val)
     elif t is KNXDPT.TWO_BOOLEAN:
-        return bool(value >> 1 & 0x01), bool(value & 0x01)
+        return bool(val >> 1 & 0x01), bool(val & 0x01)
     elif t is KNXDPT.BOOLEAN_UINT3:
-        return bool(value >> 3 & 0x01), value & 0x07
+        return bool(val >> 3 & 0x01), val & 0x07
     elif t is KNXDPT.CHAR:
-        return value[0].decode('iso-8859-1')
+        return val[0].decode('iso-8859-1')
     elif t is KNXDPT.UINT8:
-        return value[0]
+        return val[0]
     elif t is KNXDPT.INT8:
-        return struct.unpack('b', value)[0]
+        return struct.unpack('b', val)[0]
     elif t is KNXDPT.UINT16:
-        return struct.unpack('>H', value)[0]
+        return struct.unpack('>H', val)[0]
     elif t is KNXDPT.INT16:
-        return struct.unpack('>h', value)[0]
+        return struct.unpack('>h', val)[0]
     elif t is KNXDPT.FLOAT16:
-        # For a description of the KNX DPT 9 16-bit floating point format see comment in `encode_value()` above.
-        # In two's complement notation, the MSB has a negative value (-2^(n-1)):
-        msb = - (value[0] & 0x80) << 4
-        e = (value[0] & 0x78) >> 3
-        m = (value[0] & 0x07) << 8 | value[1]
+        # For a description of the KNX DPT 9 16-bit floating point format see comment in `encode_val()` above.
+        # In two's complement notation, the MSB has a negative val (-2^(n-1)):
+        msb = - (val[0] & 0x80) << 4
+        e = (val[0] & 0x78) >> 3
+        m = (val[0] & 0x07) << 8 | val[1]
         return (m + msb) * 0.01 * 2**e
     elif t is KNXDPT.TIME:
-        weekday_value = value[0] >> 5 & 0x07
+        weekday_val = val[0] >> 5 & 0x07
         return KNXTime(
-            datetime.time(value[0] & 0x1f, value[1], value[2]),
-            weekday_value-1 if weekday_value else None)
+            datetime.time(val[0] & 0x1f, val[1], val[2]),
+            weekday_val-1 if weekday_val else None)
     elif t is KNXDPT.DATE:
-        return datetime.date(value[0], value[1], value[2]+2000)
+        return datetime.date(val[0], val[1], val[2]+2000)
     elif t is KNXDPT.UINT32:
-        return struct.unpack('>I', value)[0]
+        return struct.unpack('>I', val)[0]
     elif t is KNXDPT.INT32:
-        return struct.unpack('>i', value)[0]
+        return struct.unpack('>i', val)[0]
     elif t is KNXDPT.FLOAT32:
-        return struct.unpack('>f', value)[0]
+        return struct.unpack('>f', val)[0]
     elif t in (KNXDPT.STRING, KNXDPT.VARSTRING):
-        return value.decode('iso-8859-1').split('\0')[0]
+        return val.decode('iso-8859-1').split('\0')[0]
     elif t is KNXDPT.SCENE_NUMBER:
-        return value[0]
+        return val[0]
     elif t is KNXDPT.SCENE_CONTROL:
-        return bool(value[0] & 0x80), value[0] & 0x3f
+        return bool(val[0] & 0x80), val[0] & 0x3f
     elif t is KNXDPT.DATE_TIME:
-        return datetime.datetime(year=value[0]+2000, month=value[1], day=value[2], hour=value[3] & 0x1f,
-                                 minute=value[4], second=value[5])
+        return datetime.datetime(year=val[0]+2000, month=val[1], day=val[2], hour=val[3] & 0x1f,
+                                 minute=val[4], second=val[5])
     elif t is KNXDPT.ENUM8:
-        # The raw int value is returned. The User code must construct the correct Enum type if required.
-        return value[0]
+        # The raw int val is returned. The User code must construct the correct Enum type if required.
+        return val[0]
     else:
         raise NotImplementedError()
 
