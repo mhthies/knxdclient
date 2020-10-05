@@ -97,7 +97,7 @@ DPT_ENCODING: Dict[KNXDPT, Type[EncodedData]] = {
     KNXDPT.VARSTRING: bytes,
 }
 
-DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, type] = {
+DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.BOOLEAN: bool,
     KNXDPT.TWO_BOOLEAN: tuple,
     KNXDPT.BOOLEAN_UINT3: tuple,
