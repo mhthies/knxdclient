@@ -306,7 +306,9 @@ class KNXDPacket(NamedTuple):
         return cls(KNXDPacketTypes(int.from_bytes(data[0:2], byteorder='big')), data[2:])
 
     def __repr__(self) -> str:
-        return "{}({}, data={})".format(self.__class__.__name__, self.type.name, self.data.hex(' '))
+        data_hex = self.data.hex()
+        return "{}({}, data={})".format(self.__class__.__name__, self.type.name,
+                                        ' '.join(data_hex[i:i+2] for i in range(0, len(data_hex), 2)))
 
 
 class KNXDAPDUType(enum.Enum):
@@ -343,8 +345,12 @@ class KNXGroupAPDU(NamedTuple):
             return cls(apdu_type, data[1] & 0b00111111)
 
     def __repr__(self) -> str:
-        return "{}({}, value={})".format(self.__class__.__name__, self.type.name,
-                                         self.value.hex(' ') if isinstance(self.value, bytes) else "{:02X}".format(self.value))
+        if isinstance(self.value, bytes):
+            value_hex = self.value.hex()
+            value_repr = ' '.join(value_hex[i:i + 2] for i in range(0, len(value_hex), 2))
+        else:
+            value_repr = "{:02X}".format(self.value)
+        return "{}({}, value={})".format(self.__class__.__name__, self.type.name, value_repr)
 
 
 class GroupAddress(NamedTuple):
