@@ -458,6 +458,8 @@ class KNXDConnection:
         self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
+        self._reader: Optional[asyncio.StreamReader] = None
+        self._writer: Optional[asyncio.StreamWriter] = None
         # A lock to ensure, that only one synchronous action is performed on the KNXD connection at once. Synchronous
         # actions are for example EIB_OPEN_GROUPCON. The lock should be acquired before sending the synchronous request
         # packet to KNXD and only released after receiving the response packet from KNXD.
@@ -476,14 +478,21 @@ class KNXDConnection:
 
         Awaits until connection has been established or raises one of Python's built in Exceptions on connection errors.
 
+        If a connection has already been established before, it is closed before creating a new one.
+
         :param host: KNXd host for TCP connection. Defaults to 'localhost'. Ignored, if `sock` is present.
         :param port: Port for KNXd TCP connection. Defaults to 6720, which is KNXd's default port. Ignored, if `sock` is
             present.
         :param sock: Path of the KNXd UNIX socket. If given, `host` and `port` are ignored.
         """
+        # Close previous connection gracefully if any
+        if self._writer is not None:
+            if not self._writer.is_closing():
+                self._writer.close()
+            await self._writer.wait_closed()
+
         if sock:
             logger.info("Connecting to KNXd via UNIX domain socket at %s ...", sock)
-            # TODO close previous connection if any
             self._reader, self._writer = await asyncio.open_unix_connection(sock)
         else:
             logger.info("Connecting to KNXd at %s:%s ...", host, port)
@@ -508,6 +517,7 @@ class KNXDConnection:
 
         :raises ConnectionAbortedError: in case of an unexpected EOF (connection closed without ``stop()`` being called)
         :raises ConnectionError: in case such an error occurs while reading
+        :raises ConnectionError: when no connection has been established yet or the previous connection reached an EOF.
         """
         logger.info("Entering KNXd client receive loop ...")
 
@@ -517,7 +527,10 @@ class KNXDConnection:
             except Exception as e:
                 logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
 
-        # TODO check if _reader is existing
+        if self._reader is None or self._reader.at_eof():
+            raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
+                                  "StreamReader is at EOF")
+
         while True:
             try:
                 length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
@@ -551,6 +564,8 @@ class KNXDConnection:
 
         This coroutine awaits the successful shutdown of the connection.
         """
+        if self._writer is None:
+            return
         logger.info("Stopping KNXd client ...")
         self.closing = True
         self._writer.close()
@@ -622,8 +637,12 @@ class KNXDConnection:
         This coroutine awaits the sending (including flushing the write buffer) of the packet to KNXD.
 
         :param packet: The packet to send, as a :class:`KNXDPacket`
+        :raises ValueError: If the encoded packet has an invalid length (< 2 or > 65535)
+        :raises ConnectionError: If no connection has been established yet or the connection is closing
         """
-        # TODO check if _writer is existing
+        if self._writer is None or self._writer.is_closing():
+            raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
+                                  "StreamWriter is closing")
         logger.debug("Sending packet to KNXd: %s", packet)
         data = packet.encode()
         if len(data) < 2 or len(data) > 0xffff:
