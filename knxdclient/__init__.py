@@ -235,7 +235,7 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     :return: the decoded value
     """
     if not isinstance(value, DPT_ENCODING[t]):
-        raise TypeError(f"Expected a {DPT_PYTHON_REPRESENTATION[t]} for KNX {t.name}, not {repr(value)}")
+        raise TypeError(f"Expected a {DPT_ENCODING[t]} for KNX {t.name}, not {repr(value)}")
     val = cast(Any, value)
     if t is KNXDPT.BOOLEAN:
         return bool(val)
