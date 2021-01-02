@@ -98,7 +98,7 @@ DPT_ENCODING: Dict[KNXDPT, Type[EncodedData]] = {
 }
 
 DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
-    KNXDPT.BOOLEAN: bool,
+    KNXDPT.BOOLEAN: object,  # any object can be interpreted as bool
     KNXDPT.TWO_BOOLEAN: tuple,
     KNXDPT.BOOLEAN_UINT3: tuple,
     KNXDPT.CHAR: str,
