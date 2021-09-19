@@ -19,12 +19,12 @@ import asyncio
 import knxdclient
 
 
-async def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
+def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
     print("Received group telegram: {}".format(packet))
 
 async def main() -> None:
     connection = knxdclient.KNXDConnection()
-    connection.register_telegram_handler(handler)
+    connection.set_group_apdu_handler(handler)
     await connection.connect()
     # Connection was successful. Start receive loop:
     run_task = asyncio.create_task(connection.run())
