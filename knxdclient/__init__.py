@@ -27,7 +27,8 @@ import datetime
 import enum
 import logging
 import struct
-from typing import NamedTuple, Awaitable, Callable, List, Any, Union, Optional, cast, Type, Dict, Tuple
+import warnings
+from typing import NamedTuple, Awaitable, Callable, List, Any, Union, Optional, cast, Type, Dict, Tuple, AsyncIterator
 
 logger = logging.getLogger(__name__)
 
@@ -436,11 +437,11 @@ class KNXDConnection:
 
     In summary, a typical invocation of this connector looks like this::
 
-        async def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
+        def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
             print("Received group telegram: {}".format(packet))
 
         connection = KNXDConnection()
-        connection.register_telegram_handler(handler)
+        connection.set_group_apdu_handler(handler)
         await connection.connect()
         # Connection was successful. Start receive loop:
         run_task = asyncio.create_task(connection.run())
@@ -455,7 +456,8 @@ class KNXDConnection:
         await run_task
     """
     def __init__(self):
-        self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []
+        self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
+        self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []  # TODO remove
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
         self._reader: Optional[asyncio.StreamReader] = None
@@ -521,12 +523,6 @@ class KNXDConnection:
         """
         logger.info("Entering KNXd client receive loop ...")
 
-        async def call_handler(handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]], apdu: ReceivedGroupAPDU):
-            try:
-                await handler(apdu)
-            except Exception as e:
-                logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
-
         if self._reader is None or self._reader.at_eof():
             raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
                                   "StreamReader is at EOF")
@@ -540,8 +536,8 @@ class KNXDConnection:
                 if packet.type is KNXDPacketTypes.EIB_GROUP_PACKET:
                     apdu = ReceivedGroupAPDU.decode(packet.data)
                     logger.debug("Received Group Address broadcast (APDU) from KNXd: %s", apdu)
-                    for handler in self._handlers:
-                        asyncio.create_task(call_handler(handler, apdu))
+                    if self._group_apdu_handler:
+                        self._group_apdu_handler(apdu)
                 else:
                     self._current_response = packet
                     self._response_ready.set()
@@ -579,10 +575,101 @@ class KNXDConnection:
         every incoming group telegram (asynchronous message from KNXD). To enable receiving of group telegrams, a
         Group Socket has to be opened in KNXD.
 
+        .. deprecated:: 0.4.0
+            Please use :meth:`set_group_apdu_handler` or :meth:`iterate_group_telegrams` instead. If you really need to
+            call one or more handler functions for each received telegram in concurrent asynchronous tasks, use a
+            handler function similar to the following example with :meth:`set_group_apdu_handler`::
+
+                def group_apdu_handler(apdu: ReceivedGroupAPDU) -> None:
+                    async def call_handler(handler, apdu):
+                        try:
+                            await handler(apdu)
+                        except Exception as e:
+                            logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu,
+                                          exc_info=e)
+
+                    for handler in my_handlers:
+                        asyncio.create_task(call_handler(handler, apdu))
+
         :param handler: The handler coroutine. It must be awaitable and take a single argument of type
             :class:`ReceivedGroupAPDU`.
         """
+        warnings.warn("register_telegram_handler() is deprecated, please use set_group_apdu_handler() or "
+                      "iterate_group_telegrams() instead.", DeprecationWarning)
+        if self._group_apdu_handler and self._group_apdu_handler is not self._call_handlers:
+            raise RuntimeError("A custom group APDU handler has already been registered or iterate_group_telegrams() is"
+                               " already in use.")
+        self._group_apdu_handler = self._call_handlers
         self._handlers.append(handler)
+
+    def _call_handlers(self, apdu: ReceivedGroupAPDU) -> None:
+        """ Transition helper to implement the deprecated :meth:`register_telegram_handler` with the new
+        _group_apdu_handler mechanism"""
+        async def call_handler(handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]], apdu: ReceivedGroupAPDU):
+            try:
+                await handler(apdu)
+            except Exception as e:
+                logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
+        for handler in self._handlers:
+            asyncio.create_task(call_handler(handler, apdu))
+
+    def set_group_apdu_handler(self, handler: Callable[[ReceivedGroupAPDU], Any]) -> None:
+        """
+        Set the callback handler for incoming group read/response/write telegrams.
+
+        The :meth:`run` coroutine will call the handler function in the context of the asyncio EventLoop for
+        every incoming group telegram (asynchronous message from KNXD), one after another. The handler may then dispatch
+        the telegrams, spawn a Task for each one, etc. To enable receiving of group telegrams, a Group Socket has to be
+        opened in KNXD.
+
+        Only a single handler function can be registered. Either a custom handler can be registered or
+        :meth:`iterate_group_telegrams` can be used, not both. To dispatch each incoming group telegram to multiple
+        handler functions you need to implement a handler dispatcher yourself.
+
+        :param handler: The callback function. It must take a single argument of type :class:`ReceivedGroupAPDU`.
+        :raises RuntimerError: When another handler has been registered before or :meth:`iterate_group_telegrams` is
+            already in use.
+        """
+        if self._group_apdu_handler:
+            raise RuntimeError("Another group APDU handler has already been registered or iterate_group_telegrams() is "
+                               "in use.")
+        self._group_apdu_handler = handler
+
+    async def iterate_group_telegrams(self) -> AsyncIterator[ReceivedGroupAPDU]:
+        """
+        Create an asynchronous iterator for iterating over group read/response/write telegrams as they are received from
+        KNXD.
+
+        The method creates an asynchronous iterator that will yield all received group telegrams as soon as they are
+        received. They can be iterated using an `async for` loop. To enable receiving of group telegrams, a Group Socket
+        has to be opened in KNXD::
+
+            await knx_connection.connect()
+            run_task = asyncio.create_task(knx_connection.run())
+            await knx_connection.open_group_socket()
+            try:
+                async for telegram in knx_connection.iterate_group_telegrams():
+                    print("Received telegram: ", telegram)
+            finally:
+                run_task.cancel()
+
+        Only a single asynchronous iterator for receiving the group telegrams can be used at the same time. It can only
+        be used alternatively, not together with a custom group apdu handler, as registered with
+        :meth:`set_group_apdu_handler`.
+
+        :raises RuntimerError: When a custom handler function has been registered or another iterator is already active
+        """
+        if self._group_apdu_handler:
+            raise RuntimeError("A custom group APDU handler has already been registered or iterate_group_telegrams() is"
+                               " already in use.")
+
+        queue: asyncio.Queue[ReceivedGroupAPDU] = asyncio.Queue()
+        self._group_apdu_handler = queue.put_nowait
+        try:
+            while True:
+                yield await queue.get()
+        finally:
+            self._group_apdu_handler = None
 
     async def open_group_socket(self, write_only=False) -> None:
         """
