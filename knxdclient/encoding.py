@@ -15,6 +15,8 @@ import logging
 import struct
 from typing import NamedTuple, Any, Union, Optional, cast, Type, Dict, Tuple
 
+from .packets import EncodedData
+
 logger = logging.getLogger(__name__)
 
 

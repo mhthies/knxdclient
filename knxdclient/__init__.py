@@ -21,3 +21,7 @@ KNX telegrams to/for any group address via KNXd. Additionally, there are helper 
 
 This module's base class is :class:`KNXDConnection`. See its docstring for further reference.
 """
+
+from .packets import GroupAddress
+from .client import KNXDConnection
+from .encoding import encode_value, decode_value, KNXDPT, KNXTime
