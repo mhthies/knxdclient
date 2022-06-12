@@ -6,7 +6,7 @@ EIBD is a *NIX daemon for routing EIB/KNX telegrams through various interfaces a
 It's part of the no-longer maintained [BCUSDK](https://www.auto.tuwien.ac.at/~mkoegler/index.php/bcusdk).
 However, there's a fork called [KNXD](https://github.com/knxd/knxd), which is still actively maintained. 
 
-This package reimplements small parts of the EIBD client (see [BCUSDK documentation](https://web.archive.org/web/20160418110523/https://www.auto.tuwien.ac.at/~mkoegler/eib/sdkdoc-0.0.5.pdf>), section 7.7)
+This package reimplements small parts of the EIBD client (see [BCUSDK documentation](https://web.archive.org/web/20160418110523/https://www.auto.tuwien.ac.at/~mkoegler/eib/sdkdoc-0.0.5.pdf), section 7.7)
 in pure Python 3, based on asynchronous coroutines (asyncio).
 Currently, it allows to open a Group Socket for sending and receiving KNX telegrams to/for any group address via KNXD.
 Additionally, this package includes helper methods `encode_value()` and `decode_value()` to convert the send/received data from/to native Python types according to a known KNX Datapoint Type (DPT).
