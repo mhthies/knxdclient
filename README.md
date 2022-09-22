@@ -42,7 +42,7 @@ async def main() -> None:
     await run_task
 
 
-asyncio.run_until_complete(main())
+asyncio.run(main())
 ```
 
 ## License
