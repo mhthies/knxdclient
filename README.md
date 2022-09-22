@@ -16,14 +16,14 @@ Additionally, this package includes helper methods `encode_value()` and `decode_
 
 ```python
 import asyncio
-import knxdclient
+from knxdclient import encoding, client
 
 
-def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
+def handler(packet: client.ReceivedGroupAPDU) -> None:
     print("Received group telegram: {}".format(packet))
 
 async def main() -> None:
-    connection = knxdclient.KNXDConnection()
+    connection = client.KNXDConnection()
     connection.set_group_apdu_handler(handler)
     await connection.connect()
     # Connection was successful. Start receive loop:
@@ -32,9 +32,9 @@ async def main() -> None:
     await connection.open_group_socket()
 
     # Startup completed. Now our `handler()` will receive incoming telegrams and we can send some:
-    await connection.group_write(knxdclient.GroupAddress(1,3,2),
-                                 knxdclient.KNXDAPDUType.WRITE,
-                                 knxdclient.encode_value(True, knxdclient.KNXDPT.BOOLEAN))
+    await connection.group_write(client.GroupAddress(1,3,2),
+                                 client.KNXDAPDUType.WRITE,
+                                 encoding.encode_value(True, encoding.KNXDPT.BOOLEAN))
     
     await asyncio.sleep(5)
     # Let's stop the connection and wait for graceful termination of the receive loop:
