@@ -22,7 +22,7 @@ jobs:
     - name: Install APT depenencies
       run: |
         sudo apt-get update
-        sudo apt-get -y install knxd
+        sudo apt-get -y install knxd knxd-tools
     - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip

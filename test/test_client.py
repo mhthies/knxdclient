@@ -12,7 +12,8 @@ import knxdclient
 from ._helper import async_test
 
 
-@unittest.skipIf(shutil.which("knxd") is None, "KNXD is not available in PATH")
+@unittest.skipIf(shutil.which("knxd") is None, "knxd is not available in PATH")
+@unittest.skipIf(shutil.which("knxtool") is None, "knxtool is not available in PATH")
 class MQTTClientTest(unittest.TestCase):
     def setUp(self) -> None:
         self.knxd_socket = tempfile.mktemp(suffix=".sock", prefix="knxdclient-test-knxd-")
