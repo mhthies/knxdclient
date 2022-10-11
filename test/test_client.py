@@ -108,9 +108,9 @@ class MQTTClientTest(unittest.TestCase):
             # Analyze output
             lines = stdout.strip().split(b'\n')
             # self.assertEqual(2, len(lines))  # exactly two line of Busmonitor output (=2 telegrams) are expected
-            self.assertRegex(lines[0], rb"L_Data low from 0\.5\.\d+ to 4/5/6 hops: \d+ T_Data_Group "
+            self.assertRegex(lines[0], rb"L_Data low from 0\.5\.\d+ to 4/5/6 hops: \d+ (T_Data_Group|T_DATA_XXX_REQ) "
                                        rb"A_GroupValue_Response \(small\) 2A")
-            self.assertRegex(lines[1], rb"L_Data low from 0\.5\.\d+ to 24/3/55 hops: \d+ T_Data_Group "
+            self.assertRegex(lines[1], rb"L_Data low from 0\.5\.\d+ to 24/3/55 hops: \d+ (T_Data_Group|T_DATA_XXX_REQ) "
                                        rb"A_GroupValue_Write C0 1D C0 FF EE")
 
         finally:
