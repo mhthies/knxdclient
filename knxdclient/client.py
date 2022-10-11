@@ -298,7 +298,7 @@ class KNXDConnection:
                                                     bytes([0, 0xff if write_only else 0, 0])))
             await self._response_ready.wait()  # TODO add timeout and Exception on timeout
             response = self._current_response
-        assert(response is not None)
+        assert response is not None
         if response.type is not KNXDPacketTypes.EIB_OPEN_GROUPCON:
             raise RuntimeError("Could not open KNX group socket. Response: {}".format(response))
         else:

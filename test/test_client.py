@@ -39,7 +39,7 @@ class MQTTClientTest(unittest.TestCase):
             # Open Group socket
             await connection.open_group_socket()
 
-            proc = await asyncio.create_subprocess_exec('knxtool', 'on', f'local://{self.knxd_socket}','1/2/3',
+            proc = await asyncio.create_subprocess_exec('knxtool', 'on', f'local://{self.knxd_socket}', '1/2/3',
                                                         env=dict(PATH=os.environ['PATH']))
             await proc.communicate()
             if proc.returncode:
@@ -66,7 +66,7 @@ class MQTTClientTest(unittest.TestCase):
             self.assertEqual(0, value2.src.area)
             self.assertEqual(5, value2.src.line)
             self.assertEqual(knxdclient.packets.KNXGroupAPDU(knxdclient.packets.KNXDAPDUType.WRITE,
-                                                             bytes([0xde, 0xad, 0xc0, 0xff, 0xee,])),
+                                                             bytes([0xde, 0xad, 0xc0, 0xff, 0xee])),
                              value2.payload)
 
         finally:

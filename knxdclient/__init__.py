@@ -13,7 +13,8 @@
 A pure Python async client for KNXd's (EIBd's) native Layer 4 KNX protocol.
 
 This module reimplements small parts of the EIBd client (see BCUSDK documentation
-`archive link <https://web.archive.org/web/20160418110523/https://www.auto.tuwien.ac.at/~mkoegler/eib/sdkdoc-0.0.5.pdf>`_)
+`archive link
+<https://web.archive.org/web/20160418110523/https://www.auto.tuwien.ac.at/~mkoegler/eib/sdkdoc-0.0.5.pdf>`_)
 based on Python asynchronous coroutines (asyncio). Currently, it allows to open a GroupSocket for sending and receiving
 KNX telegrams to/for any group address via KNXd. Additionally, there are helper methods :func:`encode_value` and
 :func:`decode_value` to convert the values from/to native Python types according to a known KNX Datapoint Type
