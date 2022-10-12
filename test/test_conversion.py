@@ -213,6 +213,16 @@ class MQTTClientTest(unittest.TestCase):
                          knxdclient.decode_value(b"German has \xc4\xd6\xdc\x00",
                                                  knxdclient.KNXDPT.VARSTRING))
 
+    def test_dpt17_conversion(self) -> None:
+        self.assertEqual(bytes([63]),
+                         knxdclient.encode_value(63, knxdclient.KNXDPT.SCENE_NUMBER))
+        self.assertEqual(bytes([42]),
+                         knxdclient.encode_value(42, knxdclient.KNXDPT.SCENE_NUMBER))
+        self.assertEqual(63,
+                         knxdclient.decode_value(bytes([63]), knxdclient.KNXDPT.SCENE_NUMBER))
+        self.assertEqual(42,
+                         knxdclient.decode_value(bytes([42]), knxdclient.KNXDPT.SCENE_NUMBER))
+
     def test_dpt18_conversion(self) -> None:
         self.assertEqual(bytes([63 | 0x80]),
                          knxdclient.encode_value((True, 63), knxdclient.KNXDPT.SCENE_CONTROL))
