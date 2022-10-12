@@ -116,7 +116,7 @@ DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.STRING: str,
     KNXDPT.SCENE_NUMBER: int,
     KNXDPT.SCENE_CONTROL: tuple,
-    KNXDPT.DATE_TIME: datetime.datetime,
+    KNXDPT.DATE_TIME: (datetime.datetime, datetime.date, datetime.time),
     KNXDPT.ENUM8: (int, enum.Enum),
     KNXDPT.VARSTRING: str,
 }
@@ -174,7 +174,9 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
                       val.time.minute,
                       val.time.second])
     elif t is KNXDPT.DATE:
-        return bytes([val.day, val.month, val.year - 2000])
+        if not 1990 <= val.year < 2090:
+            raise ValueError("Only dates between year 1990 and 2089 can be represend via KNX DPT 11.001")
+        return bytes([val.day, val.month, val.year - 2000 if val.year >= 2000 else val.year - 1900])
     elif t is KNXDPT.UINT32:
         return struct.pack('>I', val)
     elif t is KNXDPT.INT32:
@@ -189,7 +191,8 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.SCENE_CONTROL:
         return bytes([(0x80 if val[0] else 0) | val[1] & 0x3f])
     elif t is KNXDPT.DATE_TIME:
-        year = month = day = hour = minute = second = weekday = 0
+        month = day = hour = minute = second = weekday = 0
+        year = 1900
         date_invalid = time_invalid = 1
         dst = 0
         if isinstance(val, (datetime.date, datetime.datetime)):
@@ -197,6 +200,7 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
             month = val.month
             day = val.day
             date_invalid = 0
+            weekday = val.weekday()
         if isinstance(val, (datetime.time, datetime.datetime)):
             if isinstance(val, datetime.datetime):
                 val = val.astimezone()
@@ -206,9 +210,7 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
             time_invalid = 0
             if isinstance(val, datetime.datetime):
                 dst = int(bool(val.tzinfo.dst(val)))  # type: ignore
-        else:
-            year = month = day = 0
-        return bytes([year-2000, month, day, ((weekday+1) << 5 if not date_invalid else 0) | hour,
+        return bytes([year-1900, month, day, ((weekday+1) << 5 if not date_invalid else 0) | hour,
                       minute, second,
                       (0x20 | (date_invalid * 0x1c) | (time_invalid * 0x02) | (dst * 0x01)),
                       0])
@@ -267,7 +269,7 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
             datetime.time(val[0] & 0x1f, val[1], val[2]),
             weekday_val-1 if weekday_val else None)
     elif t is KNXDPT.DATE:
-        return datetime.date(val[0], val[1], val[2]+2000)
+        return datetime.date(val[2]+2000 if val[2] < 90 else val[2] + 1900, val[1], val[0])
     elif t is KNXDPT.UINT32:
         return struct.unpack('>I', val)[0]
     elif t is KNXDPT.INT32:
@@ -281,7 +283,7 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.SCENE_CONTROL:
         return bool(val[0] & 0x80), val[0] & 0x3f
     elif t is KNXDPT.DATE_TIME:
-        return datetime.datetime(year=val[0]+2000, month=val[1], day=val[2], hour=val[3] & 0x1f,
+        return datetime.datetime(year=val[0]+1900, month=val[1], day=val[2], hour=val[3] & 0x1f,
                                  minute=val[4], second=val[5])
     elif t is KNXDPT.ENUM8:
         # The raw int val is returned. The User code must construct the correct Enum type if required.
