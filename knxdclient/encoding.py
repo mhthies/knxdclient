@@ -232,7 +232,7 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.BOOLEAN_UINT3:
         return bool(val >> 3 & 0x01), val & 0x07
     elif t is KNXDPT.CHAR:
-        return val[0].decode('iso-8859-1')
+        return val.decode('iso-8859-1')
     elif t is KNXDPT.UINT8:
         return val[0]
     elif t is KNXDPT.INT8:
