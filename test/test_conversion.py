@@ -113,10 +113,10 @@ class MQTTClientTest(unittest.TestCase):
         # Slightly different value should be rounded
         self.assertEqual(-0.42,
                          knxdclient.decode_value(knxdclient.encode_value(-0.420001, knxdclient.KNXDPT.FLOAT16),
-                                                 knxdclient.KNXDPT.FLOAT16)),
+                                                 knxdclient.KNXDPT.FLOAT16))
         self.assertEqual(-0.42,
                          knxdclient.decode_value(knxdclient.encode_value(-0.419999, knxdclient.KNXDPT.FLOAT16),
-                                                 knxdclient.KNXDPT.FLOAT16)),
+                                                 knxdclient.KNXDPT.FLOAT16))
         self.assertEqual(41.28,
                          knxdclient.decode_value(knxdclient.encode_value(41.28, knxdclient.KNXDPT.FLOAT16),
                                                  knxdclient.KNXDPT.FLOAT16))
