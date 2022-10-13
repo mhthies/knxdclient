@@ -205,7 +205,8 @@ class KNXDClientTest(unittest.TestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await iterator_task
             # This should allow us to create a new iterator
-            _telegram_iterator2 = connection.iterate_group_telegrams()
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(connection.iterate_group_telegrams().__aiter__().__anext__(), timeout=0.05)
 
             # Check received values
             self.assertIsInstance(value1, knxdclient.ReceivedGroupAPDU)
