@@ -58,14 +58,14 @@ class MQTTClientTest(unittest.TestCase):
             self.assertEqual(knxdclient.GroupAddress(1, 2, 3), value1.dst)
             self.assertEqual(0, value1.src.area)
             self.assertEqual(5, value1.src.line)
-            self.assertEqual(knxdclient.packets.KNXGroupAPDU(knxdclient.packets.KNXDAPDUType.WRITE, 0x1),
+            self.assertEqual(knxdclient.KNXGroupAPDU(knxdclient.KNXDAPDUType.WRITE, 0x1),
                              value1.payload)
             value2 = handler.call_args_list[1][0][0]
             self.assertIsInstance(value2, knxdclient.ReceivedGroupAPDU)
             self.assertEqual(knxdclient.GroupAddress(17, 5, 127), value2.dst)
             self.assertEqual(0, value2.src.area)
             self.assertEqual(5, value2.src.line)
-            self.assertEqual(knxdclient.packets.KNXGroupAPDU(knxdclient.packets.KNXDAPDUType.WRITE,
+            self.assertEqual(knxdclient.KNXGroupAPDU(knxdclient.KNXDAPDUType.WRITE,
                                                              bytes([0xde, 0xad, 0xc0, 0xff, 0xee])),
                              value2.payload)
 
