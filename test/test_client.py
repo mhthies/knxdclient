@@ -66,7 +66,7 @@ class KNXDClientTest(unittest.TestCase):
             self.assertEqual(0, value2.src.area)
             self.assertEqual(5, value2.src.line)
             self.assertEqual(knxdclient.KNXGroupAPDU(knxdclient.KNXDAPDUType.WRITE,
-                                                             bytes([0xde, 0xad, 0xc0, 0xff, 0xee])),
+                                                     bytes([0xde, 0xad, 0xc0, 0xff, 0xee])),
                              value2.payload)
 
         finally:
