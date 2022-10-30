@@ -45,6 +45,59 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
+Alternatively, an async iterator can be used for receiving group telegrams:
+
+```python
+import asyncio
+import knxdclient
+
+# KNX Datapoint Types of some known group addresses, used for decoding incoming values and encoding group RESPONSE
+DPTs = {
+    knxdclient.GroupAddress(1, 2, 3): knxdclient.KNXDPT.BOOLEAN,
+    knxdclient.GroupAddress(4, 5, 6): knxdclient.KNXDPT.FLOAT16,
+}
+
+# Some values for responding to group READ telegrams
+CURRENT_VALUE = {
+    knxdclient.GroupAddress(1, 2, 3): True
+}
+
+
+async def main() -> None:
+    connection = knxdclient.KNXDConnection()
+    await connection.connect()
+    try:
+        # Start run task and open group socket
+        run_task = asyncio.create_task(connection.run())
+        await connection.open_group_socket()
+
+        # Iterate asynchronously over incoming group telegrams
+        packet: knxdclient.ReceivedGroupAPDU
+        async for packet in connection.iterate_group_telegrams():
+            # Respond to GROUP READ telegrams with known values from CURRENT_VALUE dict
+            if packet.payload.type == knxdclient.KNXDAPDUType.READ:
+                address = packet.dst
+                if address in CURRENT_VALUE:
+                    await connection.group_write(address,
+                                                 knxdclient.KNXDAPDUType.RESPONSE,
+                                                 knxdclient.encode_value(CURRENT_VALUE[address], DPTs[address]))
+            # Decode and log incoming group WRITE and RESPONSE telegrams 
+            else:
+                if packet.dst not in DPTs:
+                    # Skip telegrams with unknown datatype
+                    continue
+                value = knxdclient.decode_value(packet.payload.value, DPTs[packet.dst])
+                print(f"Telegram from {packet.src} to GAD {packet.dst}: {value}")
+
+    finally:
+        # Let's stop the connection and wait for graceful termination of the receive loop:
+        await connection.stop()
+        await run_task
+
+
+asyncio.run(main())
+```
+
 ## License
 
 This package is published under the terms of the Apache License 2.0.
