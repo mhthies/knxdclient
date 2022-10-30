@@ -63,7 +63,6 @@ class KNXDConnection:
     """
     def __init__(self):
         self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
-        self._handlers: List[Callable[[ReceivedGroupAPDU], Awaitable[Any]]] = []  # TODO remove
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
         self._reader: Optional[asyncio.StreamReader] = None
