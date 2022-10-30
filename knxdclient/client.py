@@ -173,52 +173,6 @@ class KNXDConnection:
         self._writer.close()
         await self._writer.wait_closed()
 
-    def register_telegram_handler(self, handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]]) -> None:
-        """
-        Register a coroutine as callback handler for incoming group read/response/write telegrams.
-
-        The :meth:`run` coroutine will run each registered handler function in a separate :class:`asyncio.Task` for
-        every incoming group telegram (asynchronous message from KNXD). To enable receiving of group telegrams, a
-        Group Socket has to be opened in KNXD.
-
-        .. deprecated:: 0.4.0
-            Please use :meth:`set_group_apdu_handler` or :meth:`iterate_group_telegrams` instead. If you really need to
-            call one or more handler functions for each received telegram in concurrent asynchronous tasks, use a
-            handler function similar to the following example with :meth:`set_group_apdu_handler`::
-
-                def group_apdu_handler(apdu: ReceivedGroupAPDU) -> None:
-                    async def call_handler(handler, apdu):
-                        try:
-                            await handler(apdu)
-                        except Exception as e:
-                            logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu,
-                                          exc_info=e)
-
-                    for handler in my_handlers:
-                        asyncio.create_task(call_handler(handler, apdu))
-
-        :param handler: The handler coroutine. It must be awaitable and take a single argument of type
-            :class:`ReceivedGroupAPDU`.
-        """
-        warnings.warn("register_telegram_handler() is deprecated, please use set_group_apdu_handler() or "
-                      "iterate_group_telegrams() instead.", DeprecationWarning)
-        if self._group_apdu_handler and self._group_apdu_handler is not self._call_handlers:
-            raise RuntimeError("A custom group APDU handler has already been registered or iterate_group_telegrams() is"
-                               " already in use.")
-        self._group_apdu_handler = self._call_handlers
-        self._handlers.append(handler)
-
-    def _call_handlers(self, apdu: ReceivedGroupAPDU) -> None:
-        """ Transition helper to implement the deprecated :meth:`register_telegram_handler` with the new
-        _group_apdu_handler mechanism"""
-        async def call_handler(handler: Callable[[ReceivedGroupAPDU], Awaitable[Any]], apdu: ReceivedGroupAPDU):
-            try:
-                await handler(apdu)
-            except Exception as e:
-                logger.error("Error while calling handler %s for incoming KNX APDU %s:", handler, apdu, exc_info=e)
-        for handler in self._handlers:
-            asyncio.create_task(call_handler(handler, apdu))
-
     def set_group_apdu_handler(self, handler: Callable[[ReceivedGroupAPDU], Any]) -> None:
         """
         Set the callback handler for incoming group read/response/write telegrams.
