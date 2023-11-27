@@ -61,12 +61,13 @@ class KNXDConnection:
         await connection.stop()
         await run_task
     """
-    def __init__(self):
+    def __init__(self, timeout: Optional[float] = None):
         self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
+        self._timeout: Optional[float] = timeout
         # A lock to ensure, that only one synchronous action is performed on the KNXD connection at once. Synchronous
         # actions are for example EIB_OPEN_GROUPCON. The lock should be acquired before sending the synchronous request
         # packet to KNXD and only released after receiving the response packet from KNXD.
@@ -106,6 +107,14 @@ class KNXDConnection:
             self._reader, self._writer = await asyncio.open_connection(host=host, port=port)
         logger.info("Connecting to KNXd successful")
 
+
+    async def _read_raw_knxpacket(self):
+        length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
+        # data is "bytes"
+        return await self._reader.readexactly(length)
+        
+
+
     async def run(self):
         """
         Coroutine for running the receive loop for incoming packets from EIBD/KNXD.
@@ -134,8 +143,13 @@ class KNXDConnection:
 
         while True:
             try:
-                length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
-                data = await self._reader.readexactly(length)
+                data = None
+                if self._timeout:
+                    read_task = self._read_raw_knxpacket()
+                    data = await asyncio.wait_for(read_task, self._timeout)
+                else:
+                    data = await self._read_raw_knxpacket()
+                    
                 packet = KNXDPacket.decode(data)
                 logger.debug("Received packet from KNXd: %s", packet)
                 if packet.type is KNXDPacketTypes.EIB_GROUP_PACKET:
@@ -152,7 +166,8 @@ class KNXDConnection:
                     return
                 else:
                     raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
-            except ConnectionError:
+            except ConnectionError as ce:
+                logger.error(ce)
                 # A connection error typically means we cannot proceed further with this connection. Thus  we abort the
                 # receive loop execution with the exception.
                 raise
@@ -226,7 +241,13 @@ class KNXDConnection:
         self._group_apdu_handler = queue.put_nowait
         try:
             while True:
-                yield await queue.get()
+                if self._timeout is not None:
+                    next_message_task = queue.get()
+                    yield await asyncio.wait_for(next_message_task, self._timeout)
+                else:
+                    yield await queue.get()
+        except asyncio.TimeoutError:
+            logger.error(f"queue.get() timed out")
         finally:
             self._group_apdu_handler = None
 
@@ -249,7 +270,13 @@ class KNXDConnection:
             self._response_ready.clear()
             await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON,
                                                     bytes([0, 0xff if write_only else 0, 0])))
-            await self._response_ready.wait()  # TODO add timeout and Exception on timeout
+            
+            if self._timeout is not None:
+                wait_task = self._response_ready.wait()
+                await asyncio.wait_for(wait_task, self._timeout)
+            else:
+                await self._response_ready.wait()
+
             response = self._current_response
         assert response is not None
         if response.type is not KNXDPacketTypes.EIB_OPEN_GROUPCON:
