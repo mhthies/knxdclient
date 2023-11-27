@@ -144,7 +144,7 @@ class KNXDConnection:
         while True:
             try:
                 data = None
-                if self._timeout:
+                if self._timeout is not None:
                     read_task = self._read_raw_knxpacket()
                     data = await asyncio.wait_for(read_task, self._timeout)
                 else:
