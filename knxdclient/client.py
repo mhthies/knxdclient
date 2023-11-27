@@ -166,10 +166,10 @@ class KNXDConnection:
                     return
                 else:
                     raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
-            except ConnectionError as ce:
-                logger.error(ce)
-                # A connection error typically means we cannot proceed further with this connection. Thus  we abort the
-                # receive loop execution with the exception.
+            except (ConnectionError, asyncio.TimeoutError, asyncio.CancelledError) as error:
+                # A connection, timeout or cancellation errors typically mean we cannot proceed further with this connection. 
+                # Thus we abort the receive loop execution with the exception.
+                logger.error(f"A connection, timeout or cancellation error has occurred. Aborting current connection. {error}")
                 raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
@@ -247,7 +247,7 @@ class KNXDConnection:
                 else:
                     yield await queue.get()
         except asyncio.TimeoutError:
-            logger.error(f"queue.get() timed out")
+            logger.error(f"Timeout while awaiting for KNX messages")
         finally:
             self._group_apdu_handler = None
 
