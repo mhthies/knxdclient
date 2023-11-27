@@ -166,7 +166,8 @@ class KNXDConnection:
                     return
                 else:
                     raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
-            except (ConnectionError, asyncio.TimeoutError, asyncio.CancelledError) as error:
+            # From python 3.11 it will raise a stdlib TimeoutError instead of asyncio.TimeoutError
+            except (ConnectionError, TimeoutError, asyncio.TimeoutError, asyncio.CancelledError) as error:
                 # A connection, timeout or cancellation errors typically mean we cannot proceed further with this connection. 
                 # Thus we abort the receive loop execution with the exception.
                 logger.error(f"A connection, timeout or cancellation error has occurred. Aborting current connection. {error}")
@@ -246,7 +247,8 @@ class KNXDConnection:
                     yield await asyncio.wait_for(next_message_task, self._timeout)
                 else:
                     yield await queue.get()
-        except asyncio.TimeoutError:
+        # From Python 3.11 a stdlib TimeoutError is thrown instead
+        except (asyncio.TimeoutError, TimeoutError):
             logger.error(f"Timeout while awaiting for KNX messages")
         finally:
             self._group_apdu_handler = None
