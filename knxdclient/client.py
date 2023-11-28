@@ -247,15 +247,15 @@ class KNXDConnection:
         queue: asyncio.Queue[ReceivedGroupAPDU] = asyncio.Queue()
         self._group_apdu_handler = queue.put_nowait
         try:
-            wait_for_exit_task = asyncio.create_task(self._run_exited.wait())
+            run_exited = asyncio.create_task(self._run_exited.wait())
             while True:
                 next_message_task = asyncio.create_task(queue.get())
                 done, _pending = await asyncio.wait(
-                    [next_message_task, wait_for_exit_task], 
+                    [next_message_task, run_exited], 
                     return_when=asyncio.FIRST_COMPLETED
                 )
                 
-                if wait_for_exit_task in done:
+                if run_exited in done:
                     raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
                 
                 yield next_message_task.result()
