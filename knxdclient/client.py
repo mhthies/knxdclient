@@ -79,6 +79,8 @@ class KNXDConnection:
         # ``wait()`` on it. As soon as a response is received by the :meth:`run` coroutine, it will store the response
         # in ``_current_response` and inform the waiting method by setting the event.
         self._response_ready = asyncio.Event()
+        # An (asyncio) event that checks whether "run" coroutine has exited or is still executing
+        self._run_exited = asyncio.Event()
 
     async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
         """
@@ -173,6 +175,11 @@ class KNXDConnection:
                 raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
+                raise
+            finally:
+                logger.debug("Exiting run loop")
+                self._run_exited.set()
+                
 
     async def stop(self):
         """
@@ -240,15 +247,20 @@ class KNXDConnection:
         queue: asyncio.Queue[ReceivedGroupAPDU] = asyncio.Queue()
         self._group_apdu_handler = queue.put_nowait
         try:
+            wait_for_exit_task = asyncio.create_task(self._run_exited.wait())
             while True:
-                if self._timeout is not None:
-                    next_message_task = queue.get()
-                    yield await asyncio.wait_for(next_message_task, self._timeout)
-                else:
-                    yield await queue.get()
-        # From Python 3.11 a stdlib TimeoutError is thrown instead
-        except (asyncio.TimeoutError, TimeoutError):
-            logger.error(f"Timeout while awaiting for KNX messages")
+                next_message_task = asyncio.create_task(queue.get())
+                done, _pending = asyncio.wait(
+                    (next_message_task, wait_for_exit_task), 
+                    return_when=asyncio.FIRST_COMPLETED)
+                
+                if wait_for_exit_task in done:
+                    raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
+                
+                yield next_message_task.result()
+        except Exception as ex:
+            logger.error(ex)
+            raise
         finally:
             self._group_apdu_handler = None
 
