@@ -113,7 +113,6 @@ class KNXDConnection:
     async def _read_raw_knxpacket(self) -> bytes:
         length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
         return await self._reader.readexactly(length)
-        
 
 
     async def run(self):
@@ -162,6 +161,7 @@ class KNXDConnection:
                     self._current_response = packet
                     self._response_ready.set()
             except asyncio.IncompleteReadError as e:
+                self._run_exited.set()
                 if self.closing:
                     logger.info("KNXd connection reached EOF. KNXd client is stopped.")
                     return
@@ -172,13 +172,12 @@ class KNXDConnection:
                 # A connection, timeout or cancellation errors typically mean we cannot proceed further with this connection. 
                 # Thus we abort the receive loop execution with the exception.
                 logger.error(f"A connection, timeout or cancellation error has occurred. Aborting current connection. {error}")
+                self._run_exited.set()
                 raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
-                raise
-            finally:
-                logger.debug("Exiting run loop")
                 self._run_exited.set()
+                raise
                 
 
     async def stop(self):
