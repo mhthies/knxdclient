@@ -108,9 +108,8 @@ class KNXDConnection:
         logger.info("Connecting to KNXd successful")
 
 
-    async def _read_raw_knxpacket(self):
+    async def _read_raw_knxpacket(self) -> bytes:
         length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
-        # data is "bytes"
         return await self._reader.readexactly(length)
         
 
