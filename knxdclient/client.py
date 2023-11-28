@@ -250,9 +250,10 @@ class KNXDConnection:
             wait_for_exit_task = asyncio.create_task(self._run_exited.wait())
             while True:
                 next_message_task = asyncio.create_task(queue.get())
-                done, _pending = asyncio.wait(
-                    (next_message_task, wait_for_exit_task), 
-                    return_when=asyncio.FIRST_COMPLETED)
+                done, _pending = await asyncio.wait(
+                    [next_message_task, wait_for_exit_task], 
+                    return_when=asyncio.FIRST_COMPLETED
+                )
                 
                 if wait_for_exit_task in done:
                     raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
@@ -284,11 +285,13 @@ class KNXDConnection:
             await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON,
                                                     bytes([0, 0xff if write_only else 0, 0])))
             
-            if self._timeout is not None:
-                wait_task = self._response_ready.wait()
-                await asyncio.wait_for(wait_task, self._timeout)
-            else:
-                await self._response_ready.wait()
+            run_exited = asyncio.create_task(self._run_exited.wait())
+            response_ready = asyncio.create_task(self._response_ready.wait())
+
+            done, _pending = await asyncio.wait([run_exited, response_ready], return_when=asyncio.FIRST_COMPLETED)
+
+            if run_exited in done:
+                raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
 
             response = self._current_response
         assert response is not None
