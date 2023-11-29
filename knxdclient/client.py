@@ -111,8 +111,10 @@ class KNXDConnection:
 
 
     async def _read_raw_knxpacket(self) -> bytes:
-        length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
-        return await self._reader.readexactly(length)
+        reader = self._reader
+        assert reader is not None
+        length = int.from_bytes(await reader.readexactly(2), byteorder='big')
+        return await reader.readexactly(length)
 
 
     async def run(self):
