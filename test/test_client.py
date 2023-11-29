@@ -148,7 +148,7 @@ class KNXDClientTest(unittest.TestCase):
             await connection.open_group_socket()
         finally:
             await connection.stop()
-            with suppress(asyncio.CancelledError, ConnectionAbortedError):
+            with suppress(asyncio.CancelledError):
                 await run_task
 
     @async_test

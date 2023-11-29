@@ -97,6 +97,8 @@ class KNXDConnection:
         """
         # Close previous connection gracefully if any
         if self._writer is not None:
+            # In case of a reconnect unset the _run_exited asyncio.Event
+            self._run_exited.clear()
             if not self._writer.is_closing():
                 self._writer.close()
             await self._writer.wait_closed()
