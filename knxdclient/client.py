@@ -153,7 +153,7 @@ class KNXDConnection:
                     data = await asyncio.wait_for(read_task, self._timeout)
                 else:
                     data = await self._read_raw_knxpacket()
-                    
+
                 packet = KNXDPacket.decode(data)
                 logger.debug("Received packet from KNXd: %s", packet)
                 if packet.type is KNXDPacketTypes.EIB_GROUP_PACKET:
@@ -173,15 +173,19 @@ class KNXDConnection:
                     raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
             # From python 3.11 it will raise a stdlib TimeoutError instead of asyncio.TimeoutError
             except (ConnectionError, TimeoutError, asyncio.TimeoutError, asyncio.CancelledError) as error:
-                # A connection, timeout or cancellation errors typically mean we cannot proceed further with this connection. 
+                # A connection, timeout or cancellation errors
+                # typically mean we cannot proceed further with this connection.
                 # Thus we abort the receive loop execution with the exception.
-                logger.error(f"A connection, timeout or cancellation error has occurred. Aborting current connection. {error}")
+                logger.error(' '.join([
+                    "A connection, timeout or cancellation error has occurred.",
+                    f"Aborting current connection. {error}"
+                ]))
                 self._run_exited.set()
                 raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
                 self._run_exited.set()
-                raise  
+                raise
 
     async def stop(self):
         """
@@ -253,13 +257,13 @@ class KNXDConnection:
             while True:
                 next_message_task = asyncio.create_task(queue.get())
                 done, _pending = await asyncio.wait(
-                    [next_message_task, run_exited], 
+                    [next_message_task, run_exited],
                     return_when=asyncio.FIRST_COMPLETED
                 )
-                
+
                 if run_exited in done:
                     raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
-                
+
                 yield next_message_task.result()
         except Exception as ex:
             logger.error(ex)
@@ -286,7 +290,7 @@ class KNXDConnection:
             self._response_ready.clear()
             await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON,
                                                     bytes([0, 0xff if write_only else 0, 0])))
-            
+
             run_exited = asyncio.create_task(self._run_exited.wait())
             response_ready = asyncio.create_task(self._response_ready.wait())
 
