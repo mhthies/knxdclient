@@ -117,9 +117,7 @@ class KNXDConnection:
         logger.info("Connecting to KNXd successful")
 
     async def _read_raw_knxpacket(self) -> bytes:
-        if self._reader is None or self._reader.at_eof():
-            raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
-                                  "StreamReader is at EOF")
+        assert self._reader is not None
         length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
         return await self._reader.readexactly(length)
 
@@ -143,6 +141,9 @@ class KNXDConnection:
         :raises ConnectionError: in case such an error occurs while reading
         :raises ConnectionError: when no connection has been established yet or the previous connection reached an EOF.
         """
+        if self._reader is None or self._reader.at_eof():
+            raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
+                                  "StreamReader is at EOF")
         logger.info("Entering KNXd client receive loop ...")
 
         while True:
