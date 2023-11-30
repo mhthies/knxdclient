@@ -230,6 +230,7 @@ class KNXDClientTest(unittest.TestCase):
                 await run_task
 
 
+@unittest.skipIf(shutil.which("knxd") is None, "knxd is not available in PATH")
 class KNXDClientTCPTest(unittest.TestCase):
     def setUp(self) -> None:
         self.knxd_process = subprocess.Popen(["knxd", "--listen-tcp=16720", "-e", "0.5.1", "-E",
