@@ -262,10 +262,8 @@ class KNXDConnection:
             while True:
                 try:
                     next_message_task = asyncio.create_task(queue.get())
-                    done, _pending = await asyncio.wait(
-                        [next_message_task, run_exited],
-                        return_when=asyncio.FIRST_COMPLETED
-                    )
+                    done, _pending = await asyncio.wait((next_message_task, run_exited),
+                                                        return_when=asyncio.FIRST_COMPLETED)
 
                     if run_exited in done:
                         raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
@@ -304,7 +302,7 @@ class KNXDConnection:
             run_exited = asyncio.create_task(self._run_exited.wait())
             response_ready = asyncio.create_task(self._response_ready.wait())
 
-            done, _pending = await asyncio.wait([run_exited, response_ready], return_when=asyncio.FIRST_COMPLETED)
+            done, _pending = await asyncio.wait((run_exited, response_ready), return_when=asyncio.FIRST_COMPLETED)
 
             if run_exited in done:
                 response_ready.cancel()
