@@ -60,13 +60,16 @@ class KNXDConnection:
         # Let's stop the connection and wait for graceful termination of the receive loop:
         await connection.stop()
         await run_task
+
+    :param timeout: Maximum time between packets received from KNXD. If the timeout is exceeded, the `run()` coroutine
+                    will terminate with a TimeoutError or asyncio.TimeoutError (depending on Python version).
+                    If None (default), no timeout is applied.
+                    Typically, no timeout should be required, as connection failures are detected by the OS and
+                    signalled by closing the network socket.
+                    Make sure to only use the `timeout` parameter, if regular packets from KNXD is expected (e.g. due
+                    to regular activity on the KNX bus).
     """
     def __init__(self, timeout: Optional[float] = None):
-        """
-        Parameters:
-        - timeout (float, optional): Maximum time allowed for the connection operation to complete, in seconds.
-        Defaults to None.
-        """
         self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
@@ -140,6 +143,8 @@ class KNXDConnection:
         :raises ConnectionAbortedError: in case of an unexpected EOF (connection closed without ``stop()`` being called)
         :raises ConnectionError: in case such an error occurs while reading
         :raises ConnectionError: when no connection has been established yet or the previous connection reached an EOF.
+        :raises TimeoutError: If given `timeout` is exceeded between packets received from KNXD (Python >= 3.11)
+        :raises asyncio.TimeoutError: If given `timeout` is exceeded between packets received from KNXD (Python < 3.11)
         """
         if self._reader is None or self._reader.at_eof():
             raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
@@ -246,6 +251,7 @@ class KNXDConnection:
         :meth:`set_group_apdu_handler`.
 
         :raises RuntimerError: When a custom handler function has been registered or another iterator is already active
+        :raises ConnectionAbortedError: in case the `run()` loop exited unexpectedly while waiting for messages
         """
         if self._group_apdu_handler:
             raise RuntimeError("A custom group APDU handler has already been registered or iterate_group_telegrams() is"
@@ -285,6 +291,7 @@ class KNXDConnection:
         :param write_only: If True, KNXD is requested to open the Group Socket in write-only mode, i.e. no incoming
             group telegrams will be received.
         :raises RuntimeError: when KNXD responds with an error message or an unexpected response packet.
+        :raises ConnectionAbortedError: in case the `run()` loop exited unexpectedly while waiting for the response
         """
         logger.info("Opening KNX group socket for sending to group addresses ...")
         async with self._lock:
