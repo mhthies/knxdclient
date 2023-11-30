@@ -62,6 +62,11 @@ class KNXDConnection:
         await run_task
     """
     def __init__(self, timeout: Optional[float] = None):
+        """
+        Parameters:
+        - timeout (float, optional): Maximum time allowed for the connection operation to complete, in seconds.
+        Defaults to None.
+        """
         self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
