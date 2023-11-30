@@ -260,20 +260,24 @@ class KNXDConnection:
         try:
             run_exited = asyncio.create_task(self._run_exited.wait())
             while True:
-                next_message_task = asyncio.create_task(queue.get())
-                done, _pending = await asyncio.wait(
-                    [next_message_task, run_exited],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
+                try:
+                    next_message_task = asyncio.create_task(queue.get())
+                    done, _pending = await asyncio.wait(
+                        [next_message_task, run_exited],
+                        return_when=asyncio.FIRST_COMPLETED
+                    )
 
-                if run_exited in done:
-                    raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
+                    if run_exited in done:
+                        raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
 
-                yield next_message_task.result()
+                    yield next_message_task.result()
+                finally:
+                    next_message_task.cancel()
         except Exception as ex:
             logger.error(ex)
             raise
         finally:
+            run_exited.cancel()
             self._group_apdu_handler = None
 
     async def open_group_socket(self, write_only=False) -> None:
@@ -303,7 +307,9 @@ class KNXDConnection:
             done, _pending = await asyncio.wait([run_exited, response_ready], return_when=asyncio.FIRST_COMPLETED)
 
             if run_exited in done:
+                response_ready.cancel()
                 raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
+            run_exited.cancel()
 
             response = self._current_response
         assert response is not None
