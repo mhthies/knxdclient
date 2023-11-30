@@ -116,14 +116,12 @@ class KNXDConnection:
             self._reader, self._writer = await asyncio.open_connection(host=host, port=port)
         logger.info("Connecting to KNXd successful")
 
-
     async def _read_raw_knxpacket(self) -> bytes:
         if self._reader is None or self._reader.at_eof():
             raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
                                   "StreamReader is at EOF")
         length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
         return await self._reader.readexactly(length)
-
 
     async def run(self):
         """
@@ -183,8 +181,7 @@ class KNXDConnection:
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
                 self._run_exited.set()
-                raise
-                
+                raise  
 
     async def stop(self):
         """
