@@ -7,6 +7,7 @@ import unittest
 import unittest.mock
 import time
 from contextlib import suppress
+import sys
 
 import knxdclient
 from ._helper import async_test
@@ -229,6 +230,7 @@ class KNXDClientTest(unittest.TestCase):
                 await run_task
 
 
+@unittest.skipIf(shutil.which("knxd") is None, "knxd is not available in PATH")
 class KNXDClientTCPTest(unittest.TestCase):
     def setUp(self) -> None:
         self.knxd_process = subprocess.Popen(["knxd", "--listen-tcp=16720", "-e", "0.5.1", "-E",
@@ -254,3 +256,28 @@ class KNXDClientTCPTest(unittest.TestCase):
             await connection.stop()
             with suppress(asyncio.CancelledError):
                 await run_task
+
+
+class KNXDClientTimeoutTest(unittest.TestCase):
+    @async_test
+    async def test_timeout(self) -> None:
+        # Create TCP server
+        async def client_handler(reader, writer):
+            # We never respond anything, so the client should run into timeout
+            await reader.read(-1)
+        server = await asyncio.start_server(client_handler, host="127.0.0.1", port=16720)
+
+        try:
+            # Setup connection and receive loop task
+            connection = knxdclient.KNXDConnection(timeout=1)
+            await connection.connect(host="127.0.0.1", port=16720)
+            run_task = asyncio.create_task(connection.run())
+
+            with self.assertRaises(ConnectionAbortedError):
+                await connection.open_group_socket()
+
+            with self.assertRaises(TimeoutError if sys.version_info >= (3, 11) else asyncio.TimeoutError):
+                await run_task
+        finally:
+            server.close()
+            await server.wait_closed()

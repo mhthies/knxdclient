@@ -60,13 +60,22 @@ class KNXDConnection:
         # Let's stop the connection and wait for graceful termination of the receive loop:
         await connection.stop()
         await run_task
+
+    :param timeout: Maximum time between packets received from KNXD. If the timeout is exceeded, the `run()` coroutine
+                    will terminate with a TimeoutError or asyncio.TimeoutError (depending on Python version).
+                    If None (default), no timeout is applied.
+                    Typically, no timeout should be required, as connection failures are detected by the OS and
+                    signalled by closing the network socket.
+                    Make sure to only use the `timeout` parameter, if regular packets from KNXD is expected (e.g. due
+                    to regular activity on the KNX bus).
     """
-    def __init__(self):
+    def __init__(self, timeout: Optional[float] = None):
         self._group_apdu_handler: Optional[Callable[[ReceivedGroupAPDU], Any]] = None
         self.closing = False
         self._current_response: Optional[KNXDPacket] = None
         self._reader: Optional[asyncio.StreamReader] = None
         self._writer: Optional[asyncio.StreamWriter] = None
+        self._timeout: Optional[float] = timeout
         # A lock to ensure, that only one synchronous action is performed on the KNXD connection at once. Synchronous
         # actions are for example EIB_OPEN_GROUPCON. The lock should be acquired before sending the synchronous request
         # packet to KNXD and only released after receiving the response packet from KNXD.
@@ -78,6 +87,8 @@ class KNXDConnection:
         # ``wait()`` on it. As soon as a response is received by the :meth:`run` coroutine, it will store the response
         # in ``_current_response` and inform the waiting method by setting the event.
         self._response_ready = asyncio.Event()
+        # An (asyncio) event that checks whether "run" coroutine has exited or is still executing
+        self._run_exited = asyncio.Event()
 
     async def connect(self, host: str = 'localhost', port: int = 6720, sock: Optional[str] = None):
         """
@@ -94,6 +105,8 @@ class KNXDConnection:
         """
         # Close previous connection gracefully if any
         if self._writer is not None:
+            # In case of a reconnect unset the _run_exited asyncio.Event
+            self._run_exited.clear()
             if not self._writer.is_closing():
                 self._writer.close()
             await self._writer.wait_closed()
@@ -105,6 +118,11 @@ class KNXDConnection:
             logger.info("Connecting to KNXd at %s:%s ...", host, port)
             self._reader, self._writer = await asyncio.open_connection(host=host, port=port)
         logger.info("Connecting to KNXd successful")
+
+    async def _read_raw_knxpacket(self) -> bytes:
+        assert self._reader is not None
+        length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
+        return await self._reader.readexactly(length)
 
     async def run(self):
         """
@@ -125,17 +143,23 @@ class KNXDConnection:
         :raises ConnectionAbortedError: in case of an unexpected EOF (connection closed without ``stop()`` being called)
         :raises ConnectionError: in case such an error occurs while reading
         :raises ConnectionError: when no connection has been established yet or the previous connection reached an EOF.
+        :raises TimeoutError: If given `timeout` is exceeded between packets received from KNXD (Python >= 3.11)
+        :raises asyncio.TimeoutError: If given `timeout` is exceeded between packets received from KNXD (Python < 3.11)
         """
-        logger.info("Entering KNXd client receive loop ...")
-
         if self._reader is None or self._reader.at_eof():
             raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
                                   "StreamReader is at EOF")
+        logger.info("Entering KNXd client receive loop ...")
 
         while True:
             try:
-                length = int.from_bytes(await self._reader.readexactly(2), byteorder='big')
-                data = await self._reader.readexactly(length)
+                data = None
+                if self._timeout is not None:
+                    read_task = self._read_raw_knxpacket()
+                    data = await asyncio.wait_for(read_task, self._timeout)
+                else:
+                    data = await self._read_raw_knxpacket()
+
                 packet = KNXDPacket.decode(data)
                 logger.debug("Received packet from KNXd: %s", packet)
                 if packet.type is KNXDPacketTypes.EIB_GROUP_PACKET:
@@ -147,17 +171,25 @@ class KNXDConnection:
                     self._current_response = packet
                     self._response_ready.set()
             except asyncio.IncompleteReadError as e:
+                self._run_exited.set()
                 if self.closing:
                     logger.info("KNXd connection reached EOF. KNXd client is stopped.")
                     return
                 else:
                     raise ConnectionAbortedError("KNXd connection was closed with EOF unexpectedly.") from e
-            except ConnectionError:
-                # A connection error typically means we cannot proceed further with this connection. Thus  we abort the
-                # receive loop execution with the exception.
+            # From python 3.11 it will raise a stdlib TimeoutError instead of asyncio.TimeoutError
+            except (ConnectionError, TimeoutError, asyncio.TimeoutError, asyncio.CancelledError) as error:
+                # A connection, timeout or cancellation errors
+                # typically mean we cannot proceed further with this connection.
+                # Thus we abort the receive loop execution with the exception.
+                logger.error("A connection, timeout or cancellation error has occurred. "
+                             "Aborting current connection: %s", error)
+                self._run_exited.set()
                 raise
             except Exception as e:
                 logger.error("Error while receiving KNX packets:", exc_info=e)
+                self._run_exited.set()
+                raise
 
     async def stop(self):
         """
@@ -217,6 +249,7 @@ class KNXDConnection:
         :meth:`set_group_apdu_handler`.
 
         :raises RuntimerError: When a custom handler function has been registered or another iterator is already active
+        :raises ConnectionAbortedError: in case the `run()` loop exited unexpectedly while waiting for messages
         """
         if self._group_apdu_handler:
             raise RuntimeError("A custom group APDU handler has already been registered or iterate_group_telegrams() is"
@@ -225,9 +258,24 @@ class KNXDConnection:
         queue: asyncio.Queue[ReceivedGroupAPDU] = asyncio.Queue()
         self._group_apdu_handler = queue.put_nowait
         try:
+            run_exited = asyncio.create_task(self._run_exited.wait())
             while True:
-                yield await queue.get()
+                try:
+                    next_message_task = asyncio.create_task(queue.get())
+                    done, _pending = await asyncio.wait((next_message_task, run_exited),
+                                                        return_when=asyncio.FIRST_COMPLETED)
+
+                    if run_exited in done:
+                        raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
+
+                    yield next_message_task.result()
+                finally:
+                    next_message_task.cancel()
+        except Exception as ex:
+            logger.error(ex)
+            raise
         finally:
+            run_exited.cancel()
             self._group_apdu_handler = None
 
     async def open_group_socket(self, write_only=False) -> None:
@@ -243,13 +291,24 @@ class KNXDConnection:
         :param write_only: If True, KNXD is requested to open the Group Socket in write-only mode, i.e. no incoming
             group telegrams will be received.
         :raises RuntimeError: when KNXD responds with an error message or an unexpected response packet.
+        :raises ConnectionAbortedError: in case the `run()` loop exited unexpectedly while waiting for the response
         """
         logger.info("Opening KNX group socket for sending to group addresses ...")
         async with self._lock:
             self._response_ready.clear()
             await self._send_eibd_packet(KNXDPacket(KNXDPacketTypes.EIB_OPEN_GROUPCON,
                                                     bytes([0, 0xff if write_only else 0, 0])))
-            await self._response_ready.wait()  # TODO add timeout and Exception on timeout
+
+            run_exited = asyncio.create_task(self._run_exited.wait())
+            response_ready = asyncio.create_task(self._response_ready.wait())
+
+            done, _pending = await asyncio.wait((run_exited, response_ready), return_when=asyncio.FIRST_COMPLETED)
+
+            if run_exited in done:
+                response_ready.cancel()
+                raise ConnectionAbortedError("KNXDConnection was closed and is no longer sending messages")
+            run_exited.cancel()
+
             response = self._current_response
         assert response is not None
         if response.type is not KNXDPacketTypes.EIB_OPEN_GROUPCON:

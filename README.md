@@ -23,7 +23,8 @@ def handler(packet: knxdclient.ReceivedGroupAPDU) -> None:
     print("Received group telegram: {}".format(packet))
 
 async def main() -> None:
-    connection = knxdclient.KNXDConnection()
+    # Raises a TimeoutError after 30 seconds of not receiving any traffic. This argument is optional
+    connection = knxdclient.KNXDConnection(timeout=30.0) 
     connection.set_group_apdu_handler(handler)
     await connection.connect()
     # Connection was successful. Start receive loop:
