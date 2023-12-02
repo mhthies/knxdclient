@@ -150,6 +150,7 @@ class KNXDConnection:
             raise ConnectionError("No connection to KNXD has been established yet or the previous connection's "
                                   "StreamReader is at EOF")
         logger.info("Entering KNXd client receive loop ...")
+        self._run_exited.clear()
 
         while True:
             try:
