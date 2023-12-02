@@ -182,8 +182,8 @@ class KNXDConnection:
                 # A connection, timeout or cancellation errors
                 # typically mean we cannot proceed further with this connection.
                 # Thus we abort the receive loop execution with the exception.
-                logger.error("A connection, timeout or cancellation error has occurred. "
-                             "Aborting current connection: %s", error)
+                logger.error("Error while waiting for next packet from KNXd: %s. "
+                             "Exiting from receive loop.", repr(error))
                 self._run_exited.set()
                 raise
             except Exception as e:
