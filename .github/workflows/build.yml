@@ -35,7 +35,7 @@ jobs:
       run: |
         coverage xml
         coverage report -m
-    - uses: codecov/codecov-action@v2
+    - uses: codecov/codecov-action@v3
       if: ${{ always() }}
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
