@@ -265,6 +265,7 @@ class KNXDClientTimeoutTest(unittest.TestCase):
         async def client_handler(reader, writer):
             # We never respond anything, so the client should run into timeout
             await reader.read(-1)
+            writer.close()
         server = await asyncio.start_server(client_handler, host="127.0.0.1", port=16720)
 
         try:
@@ -278,6 +279,7 @@ class KNXDClientTimeoutTest(unittest.TestCase):
 
             with self.assertRaises(TimeoutError if sys.version_info >= (3, 11) else asyncio.TimeoutError):
                 await run_task
+            await connection.stop()
         finally:
             server.close()
             await server.wait_closed()
