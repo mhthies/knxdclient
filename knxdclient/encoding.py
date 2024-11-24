@@ -279,6 +279,6 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
         # The raw int val is returned. The User code must construct the correct Enum type if required.
         return val[0]
     elif t is KNXDPT.COLOUR_RGB:
-        return f'#{(val[2] + (val[1] << 8) + (val[0] << 16)):X}'
+        return f'{(val[2] + (val[1] << 8) + (val[0] << 16)):X}'
     else:
         raise NotImplementedError()
