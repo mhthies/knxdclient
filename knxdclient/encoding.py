@@ -213,7 +213,7 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.VARSTRING:
         return val.encode('iso-8859-1') + b'\0'
     elif t is KNXDPT.COLOUR_RGB:
-        return bytes([val]) # TODO
+        return bytes([val[0] , val[1] , val[2]])
     else:
         raise NotImplementedError()
 
