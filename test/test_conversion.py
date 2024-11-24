@@ -270,3 +270,13 @@ class MQTTClientTest(unittest.TestCase):
         self.assertEqual(bytes([2]), knxdclient.encode_value(HAVCMode.Standby, knxdclient.KNXDPT.ENUM8))
         self.assertEqual(bytes([2]), knxdclient.encode_value(2, knxdclient.KNXDPT.ENUM8))
         self.assertEqual(2, knxdclient.decode_value(bytes([2]), knxdclient.KNXDPT.ENUM8))
+
+    def test_dpt232_conversion(self) -> None:
+        self.assertEqual(bytes([0x10, 0xCC, 0x0A]),
+                         knxdclient.encode_value(0x10CC0A, knxdclient.KNXDPT.COLOUR_RGB))
+        self.assertEqual(bytes([127, 00, 32]),
+                         knxdclient.encode_value(0x7F0020, knxdclient.KNXDPT.COLOUR_RGB))
+        self.assertEqual(0x801B10,
+                         knxdclient.decode_value(bytes([0x80, 0x1B, 0x10]), knxdclient.KNXDPT.COLOUR_RGB))
+        self.assertEqual(0x123456,
+                         knxdclient.decode_value(bytes(0x12, 0x34, 0x56), knxdclient.KNXDPT.COLOUR_RGB))
