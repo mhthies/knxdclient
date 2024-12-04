@@ -106,7 +106,7 @@ DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.DATE_TIME: (datetime.datetime, datetime.date, datetime.time),
     KNXDPT.ENUM8: (int, enum.Enum),
     KNXDPT.VARSTRING: str,
-    KNXDPT.COLOUR_RGB: bytes,
+    KNXDPT.COLOUR_RGB: (int, int, int),
 }
 
 
@@ -213,7 +213,8 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.VARSTRING:
         return val.encode('iso-8859-1') + b'\0'
     elif t is KNXDPT.COLOUR_RGB:
-        return bytes([val[0] , val[1] , val[2]])
+        # TODO: validation checks
+        return bytes(val)
     else:
         raise NotImplementedError()
 
@@ -279,6 +280,6 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
         # The raw int val is returned. The User code must construct the correct Enum type if required.
         return val[0]
     elif t is KNXDPT.COLOUR_RGB:
-        return f'{(val[2] + (val[1] << 8) + (val[0] << 16)):X}'
+        return tuple(val)
     else:
         raise NotImplementedError()
