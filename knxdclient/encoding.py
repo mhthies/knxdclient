@@ -106,7 +106,7 @@ DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.DATE_TIME: (datetime.datetime, datetime.date, datetime.time),
     KNXDPT.ENUM8: (int, enum.Enum),
     KNXDPT.VARSTRING: str,
-    KNXDPT.COLOUR_RGB: (int, int, int),
+    KNXDPT.COLOUR_RGB: tuple,
 }
 
 
