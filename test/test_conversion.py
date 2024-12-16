@@ -275,3 +275,7 @@ class MQTTClientTest(unittest.TestCase):
         self.assertEqual((0x12, 0x34, 0x56),
                          knxdclient.decode_value(knxdclient.encode_value((0x12, 0x34, 0x56), knxdclient.KNXDPT.COLOUR_RGB),
                                                  knxdclient.KNXDPT.COLOUR_RGB))
+        self.assertEqual(bytes([0x7f, 0x00, 0x20]),
+                         knxdclient.encode_value((0x7f, 0x00, 0x20), knxdclient.KNXDPT.COLOUR_RGB))
+        self.assertEqual((0x10, 0xcc, 0x0a),
+                         knxdclient.decode_value(bytes([0x10, 0xcc, 0x0a]), knxdclient.KNXDPT.COLOUR_RGB))
