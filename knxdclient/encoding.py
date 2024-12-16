@@ -215,9 +215,6 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
     elif t is KNXDPT.COLOUR_RGB:
         if len(val) != 3:
             raise ValueError(f"KNX DPT 232 requires a three-byte tuple. Received {len(val)}")
-        for this_byte in val:
-            if not 0 <= this_byte <= 255:
-                raise ValueError(f"KNX DPT 232 colours must be 0-255. Received {this_byte}")
         return bytes(val)
     else:
         raise NotImplementedError()
