@@ -277,10 +277,10 @@ class MQTTClientTest(unittest.TestCase):
         self.assertEqual(bytes([0x00, 0x00, 0x00, 0x0b, 0xad, 0xc0, 0xff, 0xee]),
                          knxdclient.encode_value(0xbadc0ffee, knxdclient.KNXDPT.INT64))
         self.assertEqual(-123456789,
-                         knxdclient.decode_value(bytes([0xff, 0xff, 0xff, 0xff, 0xf8, 0xa4, 0x32, 0xeb]), 
+                         knxdclient.decode_value(bytes([0xff, 0xff, 0xff, 0xff, 0xf8, 0xa4, 0x32, 0xeb]),
                                                  knxdclient.KNXDPT.INT64))
         self.assertEqual(0xbadc0ffee,
-                         knxdclient.decode_value(bytes([0x00, 0x00, 0x00, 0x0b, 0xad, 0xc0, 0xff, 0xee]), 
+                         knxdclient.decode_value(bytes([0x00, 0x00, 0x00, 0x0b, 0xad, 0xc0, 0xff, 0xee]),
                                                  knxdclient.KNXDPT.INT64))
 
     def test_dpt232_conversion(self) -> None:
