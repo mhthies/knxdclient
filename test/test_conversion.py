@@ -271,6 +271,16 @@ class MQTTClientTest(unittest.TestCase):
         self.assertEqual(bytes([2]), knxdclient.encode_value(2, knxdclient.KNXDPT.ENUM8))
         self.assertEqual(2, knxdclient.decode_value(bytes([2]), knxdclient.KNXDPT.ENUM8))
 
+    def test_dpt26_conversion(self) -> None:
+        self.assertEqual(bytes([63 | 0x80]),
+                         knxdclient.encode_value((True, 63), knxdclient.KNXDPT.SCENE_INFO))
+        self.assertEqual(bytes([42]),
+                         knxdclient.encode_value((False, 42), knxdclient.KNXDPT.SCENE_INFO))
+        self.assertEqual((True, 63),
+                         knxdclient.decode_value(bytes([63 | 0x40]), knxdclient.KNXDPT.SCENE_INFO))
+        self.assertEqual((False, 42),
+                         knxdclient.decode_value(bytes([42]), knxdclient.KNXDPT.SCENE_INFO))
+    
     def test_dpt29_conversion(self) -> None:
         self.assertEqual(bytes([0xff, 0xff, 0xff, 0xff, 0xf8, 0xa4, 0x32, 0xeb]),
                          knxdclient.encode_value(-123456789, knxdclient.KNXDPT.INT64))
