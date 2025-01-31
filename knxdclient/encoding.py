@@ -50,6 +50,7 @@ class KNXDPT(enum.Enum):
     SCENE_INFO = 26
     INT64 = 29
     COLOUR_RGB = 232
+    SCENE_CONFIG = 238
 
 
 class KNXTime(NamedTuple):
@@ -87,6 +88,7 @@ DPT_ENCODING: Dict[KNXDPT, Type[EncodedData]] = {
     KNXDPT.SCENE_INFO: bytes,
     KNXDPT.INT64: bytes,
     KNXDPT.COLOUR_RGB: bytes,
+    KNXDPT.SCENE_CONFIG: bytes,
 }
 
 DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
@@ -113,6 +115,7 @@ DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.SCENE_INFO: tuple,
     KNXDPT.INT64: int,
     KNXDPT.COLOUR_RGB: tuple,
+    KNXDPT.SCENE_CONFIG: tuple,
 }
 
 
@@ -226,6 +229,8 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
         if len(val) != 3:
             raise ValueError(f"KNX DPT 232 requires a three-byte tuple. Received {len(val)}")
         return bytes(val)
+    elif t is KNXDPT.SCENE_CONFIG:
+        return bytes(val)
     else:
         raise NotImplementedError()
 
@@ -296,5 +301,7 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
         return struct.unpack('>q', val)[0]
     elif t is KNXDPT.COLOUR_RGB:
         return tuple(val)
+    elif t is KNXDPT.SCENE_CONFIG:
+        return val[0]
     else:
         raise NotImplementedError()
