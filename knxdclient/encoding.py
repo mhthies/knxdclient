@@ -47,6 +47,7 @@ class KNXDPT(enum.Enum):
     DATE_TIME = 19
     ENUM8 = 20
     VARSTRING = 24
+    SCENE_INFO = 26
     INT64 = 29
     COLOUR_RGB = 232
 
@@ -83,6 +84,7 @@ DPT_ENCODING: Dict[KNXDPT, Type[EncodedData]] = {
     KNXDPT.DATE_TIME: bytes,
     KNXDPT.ENUM8: bytes,
     KNXDPT.VARSTRING: bytes,
+    KNXDPT.SCENE_INFO: bytes,
     KNXDPT.INT64: bytes,
     KNXDPT.COLOUR_RGB: bytes,
 }
@@ -108,6 +110,7 @@ DPT_PYTHON_REPRESENTATION: Dict[KNXDPT, Union[type, Tuple[type, ...]]] = {
     KNXDPT.DATE_TIME: (datetime.datetime, datetime.date, datetime.time),
     KNXDPT.ENUM8: (int, enum.Enum),
     KNXDPT.VARSTRING: str,
+    KNXDPT.SCENE_INFO: tuple,
     KNXDPT.INT64: int,
     KNXDPT.COLOUR_RGB: tuple,
 }
@@ -215,6 +218,8 @@ def encode_value(value: Any, t: KNXDPT) -> EncodedData:
         return bytes([val])
     elif t is KNXDPT.VARSTRING:
         return val.encode('iso-8859-1') + b'\0'
+    elif t is KNXDPT.SCENE_INFO:
+        return bytes([(0x40 if val[0] else 0) | val[1] & 0x3f])
     elif t is KNXDPT.INT64:
         return struct.pack('>q', val)
     elif t is KNXDPT.COLOUR_RGB:
@@ -285,6 +290,8 @@ def decode_value(value: EncodedData, t: KNXDPT) -> Any:
     elif t is KNXDPT.ENUM8:
         # The raw int val is returned. The User code must construct the correct Enum type if required.
         return val[0]
+    elif t is KNXDPT.SCENE_INFO:
+        return bool(val[0] & 0x40), val[0] & 0x3f
     elif t is KNXDPT.INT64:
         return struct.unpack('>q', val)[0]
     elif t is KNXDPT.COLOUR_RGB:
