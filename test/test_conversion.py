@@ -302,3 +302,13 @@ class MQTTClientTest(unittest.TestCase):
                          knxdclient.encode_value((0x7f, 0x00, 0x20), knxdclient.KNXDPT.COLOUR_RGB))
         self.assertEqual((0x10, 0xcc, 0x0a),
                          knxdclient.decode_value(bytes([0x10, 0xcc, 0x0a]), knxdclient.KNXDPT.COLOUR_RGB))
+
+    def test_dpt238_conversion(self) -> None:
+        self.assertEqual(bytes([62 | 0xc0]),
+                         knxdclient.encode_value((True, True, 62), knxdclient.KNXDPT.SCENE_CONFIG))
+        self.assertEqual(bytes([42 | 0x40]),
+                         knxdclient.encode_value((False, True, 42), knxdclient.KNXDPT.SCENE_CONFIG))
+        self.assertEqual((False, True, 63),
+                         knxdclient.decode_value(bytes([63 | 0x40]), knxdclient.KNXDPT.SCENE_CONFIG))
+        self.assertEqual((False, False, 42),
+                         knxdclient.decode_value(bytes([42]), knxdclient.KNXDPT.SCENE_CONFIG))
