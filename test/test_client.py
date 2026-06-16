@@ -178,6 +178,7 @@ class KNXDClientTest(unittest.IsolatedAsyncioTestCase):
                 await proc.communicate()
                 if proc.returncode:
                     raise RuntimeError(f"knxtool failed with exit code {proc.returncode}")
+                await asyncio.sleep(0.05)
                 handler.assert_called_once()
                 value1 = handler.call_args[0][0]
 
@@ -188,6 +189,7 @@ class KNXDClientTest(unittest.IsolatedAsyncioTestCase):
                 if proc.returncode:
                     raise RuntimeError(f"knxtool failed with exit code {proc.returncode}")
 
+                await asyncio.sleep(0.05)
                 self.assertEqual(2, handler.call_count)
                 value2 = handler.call_args[0][0]
 
