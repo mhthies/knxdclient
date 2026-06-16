@@ -21,3 +21,9 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
 packages = ["knxdclient"]
+
+[tool.mypy]
+files = ["knxdclient/", "test/"]
+disallow_untyped_decorators = true
+warn_unreachable = true
+check_untyped_defs = true
