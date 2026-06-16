@@ -10,12 +10,11 @@ from contextlib import suppress
 import sys
 
 import knxdclient
-from ._helper import async_test
 
 
 @unittest.skipIf(shutil.which("knxd") is None, "knxd is not available in PATH")
 @unittest.skipIf(shutil.which("knxtool") is None, "knxtool is not available in PATH")
-class KNXDClientTest(unittest.TestCase):
+class KNXDClientTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.knxd_socket = tempfile.mktemp(suffix=".sock", prefix="knxdclient-test-knxd-")
         self.knxd_process = subprocess.Popen(["knxd", f"--listen-local={self.knxd_socket}", "-e", "0.5.1", "-E",
@@ -26,7 +25,6 @@ class KNXDClientTest(unittest.TestCase):
         self.knxd_process.terminate()
         self.knxd_process.wait()
 
-    @async_test
     async def test_receive(self) -> None:
         handler = unittest.mock.Mock()
 
@@ -75,7 +73,6 @@ class KNXDClientTest(unittest.TestCase):
             with suppress(asyncio.CancelledError):
                 await run_task
 
-    @async_test
     async def test_send(self) -> None:
         # Setup connection and receive loop task
         connection = knxdclient.KNXDConnection()
@@ -119,7 +116,6 @@ class KNXDClientTest(unittest.TestCase):
             with suppress(asyncio.CancelledError):
                 await run_task
 
-    @async_test
     async def test_connection_failure(self) -> None:
         # Setup connection and receive loop task
         connection = knxdclient.KNXDConnection()
@@ -152,7 +148,6 @@ class KNXDClientTest(unittest.TestCase):
             with suppress(asyncio.CancelledError):
                 await run_task
 
-    @async_test
     async def test_receive_iterator(self) -> None:
         # Setup connection and receive loop task
         connection = knxdclient.KNXDConnection()
@@ -183,6 +178,7 @@ class KNXDClientTest(unittest.TestCase):
                 await proc.communicate()
                 if proc.returncode:
                     raise RuntimeError(f"knxtool failed with exit code {proc.returncode}")
+                await asyncio.sleep(0.05)
                 handler.assert_called_once()
                 value1 = handler.call_args[0][0]
 
@@ -193,6 +189,7 @@ class KNXDClientTest(unittest.TestCase):
                 if proc.returncode:
                     raise RuntimeError(f"knxtool failed with exit code {proc.returncode}")
 
+                await asyncio.sleep(0.05)
                 self.assertEqual(2, handler.call_count)
                 value2 = handler.call_args[0][0]
 
@@ -231,7 +228,7 @@ class KNXDClientTest(unittest.TestCase):
 
 
 @unittest.skipIf(shutil.which("knxd") is None, "knxd is not available in PATH")
-class KNXDClientTCPTest(unittest.TestCase):
+class KNXDClientTCPTest(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.knxd_process = subprocess.Popen(["knxd", "--listen-tcp=16720", "-e", "0.5.1", "-E",
                                               "0.5.2:10", "dummy"])
@@ -241,7 +238,6 @@ class KNXDClientTCPTest(unittest.TestCase):
         self.knxd_process.terminate()
         self.knxd_process.wait()
 
-    @async_test
     async def test_connect_tcp(self) -> None:
         # Setup connection and receive loop task
         connection = knxdclient.KNXDConnection()
@@ -258,8 +254,7 @@ class KNXDClientTCPTest(unittest.TestCase):
                 await run_task
 
 
-class KNXDClientTimeoutTest(unittest.TestCase):
-    @async_test
+class KNXDClientTimeoutTest(unittest.IsolatedAsyncioTestCase):
     async def test_timeout(self) -> None:
         # Create TCP server
         async def client_handler(reader, writer):

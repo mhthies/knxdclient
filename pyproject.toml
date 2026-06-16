@@ -1,3 +1,29 @@
+[project]
+name = "knxdclient"
+version = "1.2.0"
+urls = { "source" = "https://github.com/mhthies/knxdclient" }
+authors = [{ name = "Michael Thies", email = "mail@mhthies.de" }]
+description = "A pure Python async client for KNXD's (EIBD's) native Layer 4"
+readme = "README.md"
+license = "Apache-2.0"
+license-files = ["NOTICE", "LICENSE"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Development Status :: 5 - Production/Stable",
+]
+
+requires-python = ">=3.7"
+
 [build-system]
-requires = ["setuptools >= 40.6.0", "wheel"]
+requires = ["setuptools >= 61.0.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["knxdclient"]
+
+[tool.mypy]
+files = ["knxdclient/", "test/"]
+disallow_untyped_decorators = true
+warn_unreachable = true
+check_untyped_defs = true

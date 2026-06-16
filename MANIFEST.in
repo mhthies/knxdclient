@@ -1,1 +1,3 @@
 include NOTICE LICENSE README.md pyproject.toml py.typed
+graft test
+global-exclude *.py[cod]
